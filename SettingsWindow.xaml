@@ -506,6 +506,15 @@
                                  Style="{StaticResource ModernCheckBox}"
                                  IsChecked="True"/>
 
+                        <Button x:Name="CheckForUpdatesButton"
+                                Content="Check for Updates Now"
+                                Click="CheckForUpdatesNow_Click"
+                                Style="{StaticResource ModernButton}"
+                                FontSize="11"
+                                Padding="8,4"
+                                Margin="0,8,0,8"
+                                HorizontalAlignment="Left"/>
+
                         <CheckBox x:Name="SendUsageStatsCheckBox" 
                                  Content="Send anonymous usage statistics"
                                  Style="{StaticResource ModernCheckBox}"/>
@@ -574,7 +583,7 @@
                                   TextWrapping="Wrap"
                                   Margin="0,0,0,8"/>
                         <TextBlock>
-                            <Hyperlink NavigateUri="https://github.com/yourusername/TID3" 
+                            <Hyperlink NavigateUri="https://github.com/Override92/TID3" 
                                       RequestNavigate="Hyperlink_RequestNavigate"
                                       Foreground="{StaticResource PrimaryBrush}">
                                 Visit project on GitHub

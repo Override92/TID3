@@ -6,8 +6,10 @@
         xmlns:local="clr-namespace:TID3"
         mc:Ignorable="d"
         Title="TID3 - Advanced ID3 Tag Editor" Height="800" Width="1200"
+        MinHeight="800" MinWidth="1060"
         WindowStartupLocation="CenterScreen"
         Background="#FF1E1E1E"
+        Loaded="Window_Loaded"
         d:DesignHeight="800" d:DesignWidth="1200">
 
     <Window.Resources>
@@ -24,7 +26,7 @@
         <!-- Boolean to Visibility Converter -->
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
 
-        <!-- Modern DataGrid Style (simplified) -->
+        <!-- Modern DataGrid Style with Custom ScrollBars -->
         <Style x:Key="ModernDataGridWithScrollBars" TargetType="{x:Type DataGrid}">
             <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
@@ -40,6 +42,62 @@
             <Setter Property="CanUserDeleteRows" Value="False"/>
             <Setter Property="IsReadOnly" Value="True"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type DataGrid}">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ScrollViewer x:Name="DG_ScrollViewer" Focusable="false">
+                                <ScrollViewer.Template>
+                                    <ControlTemplate TargetType="{x:Type ScrollViewer}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <DataGridColumnHeadersPresenter x:Name="PART_ColumnHeadersPresenter"
+                                                                           Grid.Column="0" Grid.Row="0"
+                                                                           Visibility="{Binding HeadersVisibility, ConverterParameter={x:Static DataGridHeadersVisibility.Column}, Converter={x:Static DataGrid.HeadersVisibilityConverter}, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}"/>
+
+                                            <ScrollContentPresenter x:Name="PART_ScrollContentPresenter"
+                                                                  Grid.Column="0" Grid.Row="1"
+                                                                  CanContentScroll="{TemplateBinding CanContentScroll}"/>
+
+                                            <ScrollBar x:Name="PART_VerticalScrollBar"
+                                                     Grid.Column="1" Grid.Row="1"
+                                                     Style="{StaticResource Windows11VerticalScrollBar}"
+                                                     Orientation="Vertical"
+                                                     Value="{TemplateBinding VerticalOffset}"
+                                                     Maximum="{TemplateBinding ScrollableHeight}"
+                                                     ViewportSize="{TemplateBinding ViewportHeight}"
+                                                     Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
+
+                                            <ScrollBar x:Name="PART_HorizontalScrollBar"
+                                                     Grid.Column="0" Grid.Row="2"
+                                                     Style="{StaticResource Windows11HorizontalScrollBar}"
+                                                     Orientation="Horizontal"
+                                                     Value="{TemplateBinding HorizontalOffset}"
+                                                     Maximum="{TemplateBinding ScrollableWidth}"
+                                                     ViewportSize="{TemplateBinding ViewportWidth}"
+                                                     Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"/>
+                                        </Grid>
+                                    </ControlTemplate>
+                                </ScrollViewer.Template>
+                                <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- Modern DataGrid Column Header Style -->
@@ -121,6 +179,18 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <Style x:Key="MusicBrainzButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
+            <Setter Property="Background" Value="#ba478f"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#a03d7a"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#8f3465"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style x:Key="ModernTextBox" TargetType="TextBox">
@@ -310,6 +380,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="400"/>
         </Grid.RowDefinitions>
 
@@ -325,7 +396,7 @@
                     <TextBlock Text="Load Files" Margin="6,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
-            
+
             <Button Click="LoadFolder_Click" Style="{StaticResource ModernButton}">
                 <StackPanel Orientation="Horizontal">
                     <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
@@ -333,9 +404,9 @@
                     <TextBlock Text="Load Folder" Margin="6,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
-            
+
             <Separator Width="12" Background="Transparent"/>
-            
+
             <Button Click="SaveSelected_Click" Style="{StaticResource ModernButton}">
                 <StackPanel Orientation="Horizontal">
                     <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
@@ -343,7 +414,7 @@
                     <TextBlock Text="Save Selected" Margin="6,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
-            
+
             <Button Click="SaveAll_Click" Style="{StaticResource ModernButton}">
                 <StackPanel Orientation="Horizontal">
                     <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
@@ -351,27 +422,27 @@
                     <TextBlock Text="Save All" Margin="6,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
-            
+
             <Separator Width="12" Background="Transparent"/>
-            
-            <Button Click="SearchMusicBrainz_Click" Style="{StaticResource ModernButton}">
+
+            <Button Click="SearchMusicBrainz_Click" Style="{StaticResource MusicBrainzButton}">
                 <StackPanel Orientation="Horizontal">
                     <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
-                          Data="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/>
+                          Data="M248,124a56.11,56.11,0,0,0-32-50.61V72a48,48,0,0,0-88-26.49A48,48,0,0,0,40,72v1.39a56,56,0,0,0,0,101.2V176a48,48,0,0,0,88,26.49A48,48,0,0,0,216,176v-1.41A56.09,56.09,0,0,0,248,124ZM88,208a32,32,0,0,1-31.81-28.56A55.87,55.87,0,0,0,64,180h8a8,8,0,0,0,0-16H64A40,40,0,0,1,50.67,86.27,8,8,0,0,0,56,78.73V72a32,32,0,0,1,64,0v68.26A47.8,47.8,0,0,0,88,128a8,8,0,0,0,0,16,32,32,0,0,1,0,64Zm104-44h-8a8,8,0,0,0,0,16h8a55.87,55.87,0,0,0,7.81-.56A32,32,0,1,1,168,144a8,8,0,0,0,0-16,47.8,47.8,0,0,0-32,12.26V72a32,32,0,0,1,64,0v6.73a8,8,0,0,0,5.33,7.54A40,40,0,0,1,192,164Zm16-52a8,8,0,0,1-8,8h-4a36,36,0,0,1-36-36V80a8,8,0,0,1,16,0v4a20,20,0,0,0,20,20h4A8,8,0,0,1,208,112ZM60,120H56a8,8,0,0,1,0-16h4A20,20,0,0,0,80,84V80a8,8,0,0,1,16,0v4A36,36,0,0,1,60,120Z"/>
                     <TextBlock Text="MusicBrainz" Margin="6,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
-            
-            <Button Click="SearchDiscogs_Click" Style="{StaticResource ModernButton}">
+
+            <Button Click="SearchDiscogs_Click" Style="{StaticResource ModernButton}" Background="#FFEB743B">
                 <StackPanel Orientation="Horizontal">
                     <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
                           Data="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm0-160a72,72,0,1,0,72,72A72.08,72.08,0,0,0,128,56Zm0,128a56,56,0,1,1,56-56A56.06,56.06,0,0,1,128,184Zm0-96a40,40,0,1,0,40,40A40,40,0,0,0,128,88Zm0,64a24,24,0,1,1,24-24A24,24,0,0,1,128,152Z"/>
                     <TextBlock Text="Discogs" Margin="6,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
-            
+
             <Separator Width="12" Background="Transparent"/>
-            
+
             <Button Click="BatchEdit_Click" Style="{StaticResource ModernButton}">
                 <StackPanel Orientation="Horizontal">
                     <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
@@ -379,7 +450,7 @@
                     <TextBlock Text="Batch Edit" Margin="6,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
-            
+
             <Button Click="Settings_Click" Style="{StaticResource ModernButton}">
                 <StackPanel Orientation="Horizontal">
                     <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
@@ -387,8 +458,7 @@
                     <TextBlock Text="Settings" Margin="6,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
-            
-            <Button Click="ClearList_Click" Style="{StaticResource ModernButton}" Background="#FFDC3545">
+            <Button Click="ClearList_Click" Style="{StaticResource ModernButton}" Background="#FFDC3545" Width="100" HorizontalAlignment="Right">
                 <StackPanel Orientation="Horizontal">
                     <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
                           Data="M235.5,216.81c-22.56-11-35.5-34.58-35.5-64.8V134.73a15.94,15.94,0,0,0-10.09-14.87L165,110a8,8,0,0,1-4.48-10.34l21.32-53a28,28,0,0,0-16.1-37,28.14,28.14,0,0,0-35.82,16,.61.61,0,0,0,0,.12L108.9,79a8,8,0,0,1-10.37,4.49L73.11,73.14A15.89,15.89,0,0,0,55.74,76.8C34.68,98.45,24,123.75,24,152a111.45,111.45,0,0,0,31.18,77.53A8,8,0,0,0,61,232H232a8,8,0,0,0,3.5-15.19ZM67.14,88l25.41,10.3a24,24,0,0,0,31.23-13.45l21-53c2.56-6.11,9.47-9.27,15.43-7a12,12,0,0,1,6.88,15.92L145.69,93.76a24,24,0,0,0,13.43,31.14L184,134.73V152c0,.33,0,.66,0,1L55.77,101.71A108.84,108.84,0,0,1,67.14,88Zm48,128a87.53,87.53,0,0,1-24.34-42,8,8,0,0,0-15.49,4,105.16,105.16,0,0,0,18.36,38H64.44A95.54,95.54,0,0,1,40,152a85.9,85.9,0,0,1,7.73-36.29l137.8,55.12c3,18,10.56,33.48,21.89,45.16Z"/>
@@ -494,8 +564,14 @@
             </ScrollViewer>
         </Grid>
 
+        <!-- GridSplitter above Status/Info Panel -->
+        <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch" 
+                     Background="{StaticResource BorderBrush}" 
+                     VerticalAlignment="Center" 
+                     ResizeDirection="Rows"/>
+
         <!-- Status/Info Panel -->
-        <Border Grid.Row="3" Background="{StaticResource SecondaryBrush}" 
+        <Border Grid.Row="4" Background="{StaticResource SecondaryBrush}" 
                 BorderBrush="{StaticResource BorderBrush}" 
                 BorderThickness="1" 
                 CornerRadius="4" 
@@ -657,7 +733,7 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
-                                
+
                                 <!-- First Row: Comparison Mode and Show Empty Fields -->
                                 <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
                                     <TextBlock Text="Comparison Mode:" 
@@ -680,7 +756,7 @@
                                              Checked="ShowEmptyFields_Changed"
                                              Unchecked="ShowEmptyFields_Changed"/>
                                 </StackPanel>
-                                
+
                                 <!-- Second Row: Online Database Source Selection -->
                                 <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,0">
                                     <TextBlock Text="Online Source:" 
@@ -692,7 +768,7 @@
                                              MinWidth="200"
                                              DisplayMemberPath="DisplayName"
                                              SelectedValuePath="Source"/>
-                                    
+
                                     <Button x:Name="ApplyOnlineSourceButton"
                                            Content="Apply to Comparison"
                                            Click="ApplyOnlineSource_Click"
@@ -721,7 +797,7 @@
                                      CanUserAddRows="False"
                                      CanUserDeleteRows="False"
                                      SelectionMode="Single">
-                                     
+
 
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Field" 

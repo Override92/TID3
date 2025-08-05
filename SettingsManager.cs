@@ -141,7 +141,7 @@ namespace TID3
 
         private static readonly string SettingsFilePath = Path.Combine(SettingsDirectory, "settings.json");
 
-        public AppSettings LoadSettings()
+        public static AppSettings LoadSettings()
         {
             try
             {
@@ -174,7 +174,7 @@ namespace TID3
             }
         }
 
-        public void SaveSettings(AppSettings settings)
+        public static void SaveSettings(AppSettings settings)
         {
             try
             {
@@ -208,7 +208,7 @@ namespace TID3
             }
         }
 
-        private void ValidateSettings(AppSettings? settings)
+        private static void ValidateSettings(AppSettings? settings)
         {
             if (settings == null) return;
             

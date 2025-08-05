@@ -19,6 +19,7 @@ namespace TID3
         private readonly TagService _tagService;
         private readonly MusicBrainzService _musicBrainzService;
         private readonly DiscogsService _discogsService;
+        private readonly UpdateService _updateService;
         private readonly ObservableCollection<AudioFileInfo> _audioFiles;
         private readonly ObservableCollection<OnlineSourceItem> _onlineSourceItems;
 
@@ -67,6 +68,7 @@ namespace TID3
             _tagService = new TagService();
             _musicBrainzService = new MusicBrainzService();
             _discogsService = new DiscogsService();
+            _updateService = new UpdateService();
             _audioFiles = new ObservableCollection<AudioFileInfo>();
             _onlineSourceItems = new ObservableCollection<OnlineSourceItem>();
 
@@ -399,8 +401,7 @@ namespace TID3
                 if (settingsWindow.ShowDialog() == true)
                 {
                     // Reload settings and apply changes
-                    var settingsManager = new SettingsManager();
-                    var settings = settingsManager.LoadSettings();
+                    var settings = SettingsManager.LoadSettings();
                     ApplySettings(settings);
                     UpdateStatus("Settings applied successfully.");
                 }
@@ -442,9 +443,21 @@ namespace TID3
 
             if (result == MessageBoxResult.Yes)
             {
+                // Clean up memory for each file before clearing
+                foreach (var file in _audioFiles)
+                {
+                    file.Cleanup();
+                }
+                
                 _audioFiles.Clear();
                 SelectedFile = null!;
-                UpdateStatus("File list cleared.");
+                
+                // Force garbage collection to reclaim memory immediately
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                
+                UpdateStatus("File list cleared and memory cleaned up.");
             }
         }
 
@@ -1088,6 +1101,104 @@ namespace TID3
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+
+        #endregion
+
+        #region Update Checking
+
+        private async void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            await CheckForUpdatesOnStartup();
+        }
+
+        private async Task CheckForUpdatesOnStartup()
+        {
+            try
+            {
+                var settings = SettingsManager.LoadSettings();
+                
+                if (!settings.CheckForUpdates)
+                    return;
+
+                if (!_updateService.ShouldCheckForUpdates(settings.LastUpdateCheck))
+                    return;
+
+                var updateInfo = await _updateService.CheckForUpdatesAsync();
+                if (updateInfo != null && _updateService.IsUpdateAvailable(settings.Version, updateInfo))
+                {
+                    ShowUpdateNotification(updateInfo);
+                }
+
+                // Update last check time
+                settings.LastUpdateCheck = DateTime.Now;
+                SettingsManager.SaveSettings(settings);
+            }
+            catch
+            {
+                // Silently fail - don't interrupt user experience
+            }
+        }
+
+        public async Task<UpdateInfo?> CheckForUpdatesManually()
+        {
+            try
+            {
+                var settings = SettingsManager.LoadSettings();
+                var updateInfo = await _updateService.CheckForUpdatesAsync();
+                
+                if (updateInfo != null)
+                {
+                    settings.LastUpdateCheck = DateTime.Now;
+                    SettingsManager.SaveSettings(settings);
+                    
+                    if (_updateService.IsUpdateAvailable(settings.Version, updateInfo))
+                    {
+                        return updateInfo;
+                    }
+                }
+                
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private void ShowUpdateNotification(UpdateInfo updateInfo)
+        {
+            var message = $"A new version of TID3 is available!\n\n" +
+                         $"Current Version: {SettingsManager.LoadSettings().Version}\n" +
+                         $"Latest Version: {updateInfo.Version}\n" +
+                         $"Released: {updateInfo.PublishedAt:yyyy-MM-dd}\n\n" +
+                         $"Would you like to download the update?";
+
+            var result = MessageBox.Show(message, "Update Available", 
+                MessageBoxButton.YesNo, MessageBoxImage.Information);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = updateInfo.DownloadUrl,
+                        UseShellExecute = true
+                    });
+                }
+                catch
+                {
+                    MessageBox.Show("Could not open the download page. Please visit the GitHub releases page manually.",
+                        "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            _updateService?.Dispose();
+            base.OnClosed(e);
         }
 
         #endregion
