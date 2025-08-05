@@ -30,8 +30,8 @@ jobs:
       env:
         BUILD_COUNTER: ${{ github.run_number }}
 
-    - name: Publish application
-      run: dotnet publish TID3.csproj --configuration Release --output ./publish --no-build
+    - name: Publish Self-Contained Executable
+      run: dotnet publish TID3.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish --no-build
       env:
         BUILD_COUNTER: ${{ github.run_number }}
 
@@ -44,11 +44,11 @@ jobs:
 
     - name: Create Release (on tags)
       if: startsWith(github.ref, 'refs/tags/')
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ github.ref_name }}
-        release_name: TID3 ${{ github.ref_name }}
+        files: ./publish/TID3.exe
+        name: TID3 ${{ github.ref_name }}
         draft: false
         prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
