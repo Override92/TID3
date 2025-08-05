@@ -17,10 +17,10 @@
 
 ### 🎯 Core Functionality
 - **Multi-format Support**: MP3, FLAC, M4A, AAC, WAV, WMA
-- **Batch Processing**: Edit multiple files simultaneously
 - **Advanced Tag Comparison**: Visual before/after comparison with change tracking
 - **Smart Auto-Detection**: Automatic best match selection with confidence scoring
-- **Backup & Safety**: Optional backup creation before modifications
+- **Batch Processing**: Edit multiple files simultaneously (in progress)
+- **Backup & Safety**: Optional backup creation before modifications (in progress)
 
 ### 🌐 Online Database Integration
 - **MusicBrainz Integration**: Access to comprehensive music database
@@ -32,37 +32,32 @@
   - Release year (10% weight)
   - Track titles (5% weight)
 - **Smart Field Preservation**: Respects album-level vs track-level metadata
-- **Auto-Selection**: Automatically applies matches with 70%+ confidence
 
 ### 🎨 Modern Windows 11 UI
 - **Dark Theme**: Professional dark interface
-- **Windows 11 Scrollbars**: Thin, modern scrollbars matching system design
-- **Responsive Design**: Optimized for different screen sizes
 - **Intuitive Navigation**: Tab-based interface with clear sections
 - **Real-time Preview**: Live comparison view of changes
+- **Responsive Design**: Optimized for different screen sizes (in progress)
 
 ### ⚙️ Advanced Settings
-- **API Configuration**: MusicBrainz and Discogs credentials
-- **File Processing Options**: Auto-save, backup creation, subdirectory inclusion
-- **UI Customization**: Theme selection, font size, language options
+- **API Configuration**: Discogs credentials
 - **Performance Tuning**: Concurrent operations control
 - **Cache Management**: Efficient data caching system
+- **File Processing Options**: Auto-save, backup creation, subdirectory inclusion (in progress)
+- **UI Customization**: Theme selection, font size, language options (in progress)
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 - Windows 10/11
 - .NET 9.0 Runtime
-- Audio files in supported formats
 
 ### Installation
-1. Download the latest release from [Releases](../../releases)
-2. Extract the ZIP file to your preferred location
-3. Run `TID3.exe`
+1. see "Building from source"
 
 ### First Steps
 1. **Load Files**: Use "Load Files" or "Load Folder" to import your audio collection
-2. **Configure APIs**: Set up MusicBrainz and Discogs credentials in Settings
+2. **Configure APIs**: Set up Discogs credentials in Settings
 3. **Search Online**: Use the online database search for automatic tag completion
 4. **Review Changes**: Check the Tag Comparison tab to review proposed changes
 5. **Apply & Save**: Accept changes and save your files
@@ -74,13 +69,10 @@
 - [x] Multi-format audio file support
 - [x] MusicBrainz API integration
 - [x] Discogs API integration
-- [x] Advanced matching algorithm with track count comparison
+- [x] Advanced matching algorithm
 - [x] Tag comparison system with change tracking
 - [x] Windows 11 modern UI design
-- [x] Settings management with persistence
-- [x] Batch processing capabilities
-- [x] Auto-selection with confidence scoring
-- [x] Smart field preservation for online metadata
+- [x] Settings management
 
 ### 🔧 Technical Implementation
 - **Architecture**: MVVM pattern with nullable reference types
@@ -89,13 +81,6 @@
 - **String Matching**: Levenshtein distance algorithm
 - **UI Framework**: WPF with modern Windows 11 styling
 - **Configuration**: JSON-based settings with validation
-
-### 📈 Recent Improvements
-- **Enhanced Matching**: Added track count comparison to scoring algorithm
-- **UI Polish**: Implemented Windows 11 style scrollbars throughout application
-- **Bug Fixes**: Resolved tag comparison display issues and OnlineSourceComboBox errors
-- **Performance**: Optimized online database search and result processing
-- **UX**: Improved automatic selection and comparison tab switching
 
 ## 🛠️ Development
 
@@ -106,6 +91,7 @@ cd TID3
 dotnet restore
 dotnet build
 ```
+- Don't forget to add TagLibSharp 2.3.0 before building
 
 ### Requirements
 - Visual Studio 2022 or VS Code
@@ -133,19 +119,6 @@ TID3/
 | WAV    | ✅   | ✅    | ID3v2 in WAV |
 | WMA    | ✅   | ✅    | Windows Media |
 
-## 📸 Screenshots
-
-### Main Interface
-*Modern dark theme with intuitive file management*
-
-### Tag Comparison
-*Side-by-side comparison with change tracking*
-
-### Settings Window
-*Comprehensive configuration options*
-
-### Online Database Search
-*Intelligent matching with confidence scores*
 
 ## 🤝 Contributing
 
@@ -173,7 +146,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - 🐛 **Bug Reports**: [Issues](../../issues)
 - 💡 **Feature Requests**: [Discussions](../../discussions)
-- 📖 **Documentation**: [Wiki](../../wiki)
 
 ---
 
