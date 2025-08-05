@@ -35,11 +35,14 @@ namespace TID3
                 
                 if (version != null)
                 {
-                    VersionTextBlock.Text = $"Version {version.Major}.{version.Minor}.{version.Build}";
+                    // Show full version with build number
+                    VersionTextBlock.Text = $"Version {version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
                     
-                    if (!string.IsNullOrEmpty(fileVersion.FileVersion) && fileVersion.FileVersion != version.ToString())
+                    // Add additional info if available
+                    if (!string.IsNullOrEmpty(fileVersion.FileVersion))
                     {
-                        VersionTextBlock.Text += $" (Build {fileVersion.FileVersion})";
+                        var buildDate = DateTime.MinValue.AddDays(version.Build);
+                        VersionTextBlock.Text += $" (Build #{version.Revision})";
                     }
                 }
                 else

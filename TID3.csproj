@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <OutputType>WinExe</OutputType>
     <RuntimeIdentifiers>win-x64;win-x86;win-arm64</RuntimeIdentifiers>
     <IsWebBootstrapper>false</IsWebBootstrapper>
@@ -20,7 +20,7 @@
     <BuildCounter Condition="'$(BUILD_COUNTER)' != ''">$(BUILD_COUNTER)</BuildCounter>
     <Version>0.1.$([System.DateTime]::Now.DayOfYear).$(BuildCounter)</Version>
     <FileVersion>0.1.$([System.DateTime]::Now.DayOfYear).$(BuildCounter)</FileVersion>
-    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <AssemblyVersion>0.1.$([System.DateTime]::Now.DayOfYear).$(BuildCounter)</AssemblyVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
     <UseWPF>true</UseWPF>
