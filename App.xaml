@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Application x:Class="TID3.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:local="clr-namespace:TID3"
+             mc:Ignorable="d"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <!-- Global Application Resources -->
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- You can add global styles here -->
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Global Styles -->
+            <Style x:Key="GlobalTextBlock" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="#FFFFFFFF"/>
+                <Setter Property="FontFamily" Value="Segoe UI"/>
+            </Style>
+
+            <!-- Global Colors -->
+            <SolidColorBrush x:Key="GlobalPrimaryBrush" Color="#FF0078D4"/>
+            <SolidColorBrush x:Key="GlobalSecondaryBrush" Color="#FF2D2D30"/>
+            <SolidColorBrush x:Key="GlobalAccentBrush" Color="#FF007ACC"/>
+            <SolidColorBrush x:Key="GlobalTextBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="GlobalSubTextBrush" Color="#FFCCCCCC"/>
+            <SolidColorBrush x:Key="GlobalBorderBrush" Color="#FF3F3F46"/>
+            <SolidColorBrush x:Key="GlobalBackgroundBrush" Color="#FF252526"/>
+            <SolidColorBrush x:Key="GlobalDarkBackgroundBrush" Color="#FF1E1E1E"/>
+
+            <!-- Global Windows 11 Style ScrollBar -->
+            <Style x:Key="Windows11ScrollBarThumb" TargetType="{x:Type Thumb}">
+                <Setter Property="OverridesDefaultStyle" Value="true"/>
+                <Setter Property="IsTabStop" Value="false"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type Thumb}">
+                            <Border x:Name="rectangle" 
+                                    Background="#FF6B6B6B"
+                                    CornerRadius="4"
+                                    Margin="2"/>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="true">
+                                    <Setter TargetName="rectangle" Property="Background" Value="#FF8B8B8B"/>
+                                </Trigger>
+                                <Trigger Property="IsDragging" Value="true">
+                                    <Setter TargetName="rectangle" Property="Background" Value="#FF9B9B9B"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="Windows11VerticalScrollBar" TargetType="{x:Type ScrollBar}">
+                <Setter Property="OverridesDefaultStyle" Value="true"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Width" Value="12"/>
+                <Setter Property="Margin" Value="0,0,2,0"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type ScrollBar}">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderThickness="0"
+                                    CornerRadius="6">
+                                <Track x:Name="PART_Track"
+                                       IsDirectionReversed="true">
+                                    <Track.Thumb>
+                                        <Thumb Style="{StaticResource Windows11ScrollBarThumb}"/>
+                                    </Track.Thumb>
+                                </Track>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="Windows11HorizontalScrollBarThumb" TargetType="{x:Type Thumb}">
+                <Setter Property="OverridesDefaultStyle" Value="true"/>
+                <Setter Property="IsTabStop" Value="false"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type Thumb}">
+                            <Border x:Name="rectangle" 
+                                    Background="#FF6B6B6B"
+                                    CornerRadius="4"
+                                    Margin="2"/>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="true">
+                                    <Setter TargetName="rectangle" Property="Background" Value="#FF8B8B8B"/>
+                                </Trigger>
+                                <Trigger Property="IsDragging" Value="true">
+                                    <Setter TargetName="rectangle" Property="Background" Value="#FF9B9B9B"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="Windows11HorizontalScrollBar" TargetType="{x:Type ScrollBar}">
+                <Setter Property="OverridesDefaultStyle" Value="true"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Height" Value="12"/>
+                <Setter Property="Margin" Value="0,0,0,2"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type ScrollBar}">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderThickness="0"
+                                    CornerRadius="6">
+                                <Track x:Name="PART_Track"
+                                       IsDirectionReversed="false">
+                                    <Track.Thumb>
+                                        <Thumb Style="{StaticResource Windows11HorizontalScrollBarThumb}"/>
+                                    </Track.Thumb>
+                                </Track>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Global Windows 11 Style ScrollViewer -->
+            <Style x:Key="Windows11ScrollViewer" TargetType="{x:Type ScrollViewer}">
+                <Setter Property="OverridesDefaultStyle" Value="True"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type ScrollViewer}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <ScrollContentPresenter x:Name="PART_ScrollContentPresenter"
+                                                      Grid.Column="0" Grid.Row="0"
+                                                      Content="{TemplateBinding Content}"
+                                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                      CanContentScroll="{TemplateBinding CanContentScroll}"
+                                                      CanHorizontallyScroll="False"
+                                                      CanVerticallyScroll="False"/>
+
+                                <ScrollBar x:Name="PART_VerticalScrollBar"
+                                         Grid.Column="1" Grid.Row="0"
+                                         Style="{StaticResource Windows11VerticalScrollBar}"
+                                         Value="{TemplateBinding VerticalOffset}"
+                                         Maximum="{TemplateBinding ScrollableHeight}"
+                                         ViewportSize="{TemplateBinding ViewportHeight}"
+                                         Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
+
+                                <ScrollBar x:Name="PART_HorizontalScrollBar"
+                                         Grid.Column="0" Grid.Row="1"
+                                         Style="{StaticResource Windows11HorizontalScrollBar}"
+                                         Orientation="Horizontal"
+                                         Value="{TemplateBinding HorizontalOffset}"
+                                         Maximum="{TemplateBinding ScrollableWidth}"
+                                         ViewportSize="{TemplateBinding ViewportWidth}"
+                                         Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"/>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

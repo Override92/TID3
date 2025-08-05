@@ -1,0 +1,622 @@
+﻿<Window x:Class="TID3.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:TID3"
+        mc:Ignorable="d"
+        Title="TID3 Settings" Height="700" Width="800"
+        WindowStartupLocation="CenterOwner"
+        Background="#FF1E1E1E"
+        ResizeMode="CanResize"
+        d:DesignHeight="700" d:DesignWidth="800">
+
+    <Window.Resources>
+        <!-- Modern Dark Theme Styles -->
+        <SolidColorBrush x:Key="PrimaryBrush" Color="#FF0078D4"/>
+        <SolidColorBrush x:Key="SecondaryBrush" Color="#FF2D2D30"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#FF007ACC"/>
+        <SolidColorBrush x:Key="TextBrush" Color="#FFFFFFFF"/>
+        <SolidColorBrush x:Key="SubTextBrush" Color="#FFCCCCCC"/>
+        <SolidColorBrush x:Key="BorderBrush" Color="#FF3F3F46"/>
+        <SolidColorBrush x:Key="BackgroundBrush" Color="#FF252526"/>
+        <SolidColorBrush x:Key="SuccessBrush" Color="#FF28A745"/>
+        <SolidColorBrush x:Key="WarningBrush" Color="#FFFFC107"/>
+        <SolidColorBrush x:Key="DangerBrush" Color="#FFDC3545"/>
+
+        <Style x:Key="ModernButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="4"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" 
+                                            VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ModernTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource SecondaryBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                        Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ModernPasswordBox" TargetType="PasswordBox">
+            <Setter Property="Background" Value="{StaticResource SecondaryBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="PasswordBox">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                        Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ModernCheckBox" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Margin" Value="4,8,4,4"/>
+        </Style>
+
+        <Style x:Key="ModernComboBox" TargetType="ComboBox">
+            <Setter Property="Background" Value="{StaticResource SecondaryBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton" 
+                                        Grid.Column="2" 
+                                        Focusable="false"
+                                        IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                        ClickMode="Press">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="Border" 
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="3">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition />
+                                                    <ColumnDefinition Width="20" />
+                                                </Grid.ColumnDefinitions>
+                                                <Path x:Name="Arrow"
+                                                    Grid.Column="1"     
+                                                    Fill="{StaticResource TextBrush}"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Data="M 0 0 L 4 4 L 8 0 Z"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="true">
+                                                <Setter TargetName="Border" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="true">
+                                                <Setter TargetName="Border" Property="Background" Value="#FF005A9E"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter x:Name="ContentSite"
+                                            IsHitTestVisible="False" 
+                                            Content="{TemplateBinding SelectionBoxItem}"
+                                            ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                            ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                            Margin="8,6,25,6"
+                                            VerticalAlignment="Center"
+                                            HorizontalAlignment="Left" />
+                            <TextBox x:Name="PART_EditableTextBox"
+                                   Style="{x:Null}" 
+                                   HorizontalAlignment="Left" 
+                                   VerticalAlignment="Center" 
+                                   Margin="3,3,23,3"
+                                   Focusable="True" 
+                                   Background="Transparent"
+                                   Foreground="{StaticResource TextBrush}"
+                                   Visibility="Hidden"
+                                   IsReadOnly="{TemplateBinding IsReadOnly}"/>
+                            <Popup x:Name="Popup"
+                                 Placement="Bottom"
+                                 IsOpen="{TemplateBinding IsDropDownOpen}"
+                                 AllowsTransparency="True" 
+                                 Focusable="False"
+                                 PopupAnimation="Slide">
+                                <Grid x:Name="DropDown"
+                                    SnapsToDevicePixels="True"                
+                                    MinWidth="{TemplateBinding ActualWidth}"
+                                    MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                    <Border x:Name="DropDownBorder"
+                                          Background="{StaticResource SecondaryBrush}"
+                                          BorderThickness="1"
+                                          BorderBrush="{StaticResource BorderBrush}"
+                                          CornerRadius="3">
+                                        <Border.Effect>
+                                            <DropShadowEffect Color="Black" 
+                                                            Direction="270" 
+                                                            ShadowDepth="2" 
+                                                            Opacity="0.3" 
+                                                            BlurRadius="4"/>
+                                        </Border.Effect>
+                                    </Border>
+                                    <ScrollViewer Margin="4,6,4,6" SnapsToDevicePixels="True" Style="{StaticResource Windows11ScrollViewer}">
+                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
+                                    </ScrollViewer>
+                                </Grid>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="HasItems" Value="false">
+                                <Setter TargetName="DropDownBorder" Property="MinHeight" Value="95"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="false">
+                                <Setter Property="Foreground" Value="#FF888888"/>
+                                <Setter Property="Opacity" Value="0.6"/>
+                            </Trigger>
+                            <Trigger Property="IsGrouping" Value="true">
+                                <Setter Property="ScrollViewer.CanContentScroll" Value="false"/>
+                            </Trigger>
+                            <Trigger SourceName="Popup" Property="Popup.AllowsTransparency" Value="true">
+                                <Setter TargetName="DropDownBorder" Property="CornerRadius" Value="3"/>
+                                <Setter TargetName="DropDownBorder" Property="Margin" Value="0,2,0,0"/>
+                            </Trigger>
+                            <Trigger Property="IsEditable" Value="true">
+                                <Setter Property="IsTabStop" Value="false"/>
+                                <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="ContentSite" Property="Visibility" Value="Hidden"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ModernComboBoxItem" TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Border" 
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="2">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="true">
+                                <Setter TargetName="Border" Property="Background" Value="{StaticResource PrimaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="true">
+                                <Setter TargetName="Border" Property="Background" Value="{StaticResource AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ModernSlider" TargetType="Slider">
+            <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="Background" Value="{StaticResource BorderBrush}"/>
+        </Style>
+
+        <Style x:Key="ModernLabel" TargetType="Label">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="0,16,0,12"/>
+        </Style>
+
+        <Style x:Key="HeaderText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0" Text="TID3 Settings" Style="{StaticResource HeaderText}"/>
+
+        <!-- Settings Content -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Style="{StaticResource Windows11ScrollViewer}">
+            <StackPanel>
+
+                <!-- API Configuration Section -->
+                <StackPanel Orientation="Horizontal" Margin="0,16,0,12">
+                    <Path Fill="{StaticResource TextBrush}" Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center" Stretch="Uniform"
+                          Data="M128,24h0A104,104,0,1,0,232,128,104.12,104.12,0,0,0,128,24Zm88,104a87.61,87.61,0,0,1-3.33,24H174.16a157.44,157.44,0,0,0,0-48h38.51A87.61,87.61,0,0,1,216,128ZM102,168H154a115.11,115.11,0,0,1-26,45A115.27,115.27,0,0,1,102,168Zm-3.9-16a140.84,140.84,0,0,1,0-48h59.88a140.84,140.84,0,0,1,0,48ZM40,128a87.61,87.61,0,0,1,3.33-24H81.84a157.44,157.44,0,0,0,0,48H43.33A87.61,87.61,0,0,1,40,128ZM154,88H102a115.11,115.11,0,0,1,26-45A115.27,115.27,0,0,1,154,88Zm52.33,0H170.71a135.28,135.28,0,0,0-22.3-45.6A88.29,88.29,0,0,1,206.37,88ZM107.59,42.4A135.28,135.28,0,0,0,85.29,88H49.63A88.29,88.29,0,0,1,107.59,42.4ZM49.63,168H85.29a135.28,135.28,0,0,0,22.3,45.6A88.29,88.29,0,0,1,49.63,168Zm98.78,45.6a135.28,135.28,0,0,0,22.3-45.6h35.66A88.29,88.29,0,0,1,148.41,213.6Z"/>
+                    <TextBlock Text="API Configuration" 
+                               Foreground="{StaticResource TextBrush}" 
+                               FontSize="16" 
+                               FontWeight="Bold" 
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+                <Border Background="{StaticResource SecondaryBrush}" 
+                        BorderBrush="{StaticResource BorderBrush}" 
+                        BorderThickness="1" 
+                        CornerRadius="6" 
+                        Padding="16" 
+                        Margin="0,0,0,16">
+                    <StackPanel>
+                        <!-- MusicBrainz Settings -->
+                        <Label Content="MusicBrainz Configuration:" Style="{StaticResource ModernLabel}"/>
+                        <TextBlock Text="MusicBrainz API is free and doesn't require an API key."
+                                  Foreground="{StaticResource SubTextBrush}"
+                                  Margin="0,0,0,8"/>
+
+                        <Label Content="User Agent (Optional):" Style="{StaticResource ModernLabel}" Margin="0,12,0,4"/>
+                        <TextBox x:Name="MusicBrainzUserAgentTextBox" 
+                                Style="{StaticResource ModernTextBox}"
+                                Text="TID3/1.0 (your-email@example.com)"
+                                PreviewMouseWheel="TextBox_PreviewMouseWheel"/>
+
+                        <!-- Discogs Settings -->
+                        <Label Content="Discogs API Key:" Style="{StaticResource ModernLabel}" Margin="0,16,0,4"/>
+                        <PasswordBox x:Name="DiscogsApiKeyPasswordBox" 
+                                    Style="{StaticResource ModernPasswordBox}"
+                                    PreviewMouseWheel="PasswordBox_PreviewMouseWheel"/>
+
+                        <Label Content="Discogs Secret:" Style="{StaticResource ModernLabel}" Margin="0,8,0,4"/>
+                        <PasswordBox x:Name="DiscogsSecretPasswordBox" 
+                                    Style="{StaticResource ModernPasswordBox}"
+                                    PreviewMouseWheel="PasswordBox_PreviewMouseWheel"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                            <Button Content="Test Discogs Connection" 
+                                    Click="TestDiscogs_Click" 
+                                    Style="{StaticResource ModernButton}"
+                                    Background="{StaticResource SuccessBrush}"/>
+                            <TextBlock x:Name="DiscogsTestStatus" 
+                                      Margin="12,0,0,0" 
+                                      VerticalAlignment="Center"
+                                      Foreground="{StaticResource SubTextBrush}"/>
+                        </StackPanel>
+
+                        <TextBlock Margin="0,8,0,0">
+                            <Hyperlink NavigateUri="https://www.discogs.com/developers/" 
+                                      RequestNavigate="Hyperlink_RequestNavigate"
+                                      Foreground="{StaticResource PrimaryBrush}">
+                                Get your Discogs API credentials here
+                            </Hyperlink>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <!-- File Processing Section -->
+                <StackPanel Orientation="Horizontal" Margin="0,16,0,12">
+                    <Path Fill="{StaticResource TextBrush}" Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center" Stretch="Uniform"
+                          Data="M208,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM88,160a8,8,0,1,1-8,8A8,8,0,0,1,88,160ZM48,48H80v97.38a24,24,0,1,0,16,0V115.31l48,48V208H48ZM208,208H160V160a8,8,0,0,0-2.34-5.66L96,92.69V48h32V72a8,8,0,0,0,2.34,5.66l16,16A23.74,23.74,0,0,0,144,104a24,24,0,1,0,24-24,23.74,23.74,0,0,0-10.34,2.35L144,68.69V48h64V208ZM168,96a8,8,0,1,1-8,8A8,8,0,0,1,168,96Z"/>
+                    <TextBlock Text="File Processing" 
+                               Foreground="{StaticResource TextBrush}" 
+                               FontSize="16" 
+                               FontWeight="Bold" 
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+                <Border Background="{StaticResource SecondaryBrush}" 
+                        BorderBrush="{StaticResource BorderBrush}" 
+                        BorderThickness="1" 
+                        CornerRadius="6" 
+                        Padding="16" 
+                        Margin="0,0,0,16">
+                    <StackPanel>
+                        <CheckBox x:Name="AutoSaveCheckBox" 
+                                 Content="Auto-save changes immediately"
+                                 Style="{StaticResource ModernCheckBox}"/>
+
+                        <CheckBox x:Name="CreateBackupCheckBox" 
+                                 Content="Create backup before modifying files"
+                                 Style="{StaticResource ModernCheckBox}"/>
+
+                        <CheckBox x:Name="IncludeSubdirectoriesCheckBox" 
+                                 Content="Include subdirectories when loading folders"
+                                 Style="{StaticResource ModernCheckBox}"
+                                 IsChecked="True"/>
+
+                        <Label Content="Default file extensions:" Style="{StaticResource ModernLabel}" Margin="0,12,0,4"/>
+                        <TextBox x:Name="SupportedExtensionsTextBox" 
+                                Style="{StaticResource ModernTextBox}"
+                                Text=".mp3, .flac, .m4a, .aac, .wav, .wma"
+                                PreviewMouseWheel="TextBox_PreviewMouseWheel"/>
+
+                        <Label Content="Maximum concurrent file operations:" Style="{StaticResource ModernLabel}" Margin="0,12,0,4"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Slider x:Name="MaxConcurrentOperationsSlider" 
+                                   Style="{StaticResource ModernSlider}"
+                                   Minimum="1" Maximum="20" Value="4"
+                                   TickFrequency="1" IsSnapToTickEnabled="True"
+                                   PreviewMouseWheel="Slider_PreviewMouseWheel"/>
+                            <TextBlock Grid.Column="1" 
+                                      Text="{Binding ElementName=MaxConcurrentOperationsSlider, Path=Value}"
+                                      Foreground="{StaticResource TextBrush}"
+                                      VerticalAlignment="Center"
+                                      Margin="12,0,0,0"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- User Interface Section -->
+                <StackPanel Orientation="Horizontal" Margin="0,16,0,12">
+                    <Path Fill="{StaticResource TextBrush}" Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center" Stretch="Uniform"
+                          Data="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,16V96H40V56ZM40,112H96v88H40Zm176,88H112V112H216v88Z"/>
+                    <TextBlock Text="User Interface" 
+                               Foreground="{StaticResource TextBrush}" 
+                               FontSize="16" 
+                               FontWeight="Bold" 
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+                <Border Background="{StaticResource SecondaryBrush}" 
+                        BorderBrush="{StaticResource BorderBrush}" 
+                        BorderThickness="1" 
+                        CornerRadius="6" 
+                        Padding="16" 
+                        Margin="0,0,0,16">
+                    <StackPanel>
+                        <Label Content="Theme:" Style="{StaticResource ModernLabel}"/>
+                        <ComboBox x:Name="ThemeComboBox" Style="{StaticResource ModernComboBox}" PreviewMouseWheel="ComboBox_PreviewMouseWheel">
+                            <ComboBoxItem Content="Dark (Default)" IsSelected="True" Style="{StaticResource ModernComboBoxItem}"/>
+                            <ComboBoxItem Content="Light" Style="{StaticResource ModernComboBoxItem}"/>
+                            <ComboBoxItem Content="Auto (System)" Style="{StaticResource ModernComboBoxItem}"/>
+                        </ComboBox>
+
+                        <Label Content="Language:" Style="{StaticResource ModernLabel}" Margin="0,12,0,4"/>
+                        <ComboBox x:Name="LanguageComboBox" Style="{StaticResource ModernComboBox}" PreviewMouseWheel="ComboBox_PreviewMouseWheel">
+                            <ComboBoxItem Content="English" IsSelected="True" Style="{StaticResource ModernComboBoxItem}"/>
+                            <ComboBoxItem Content="Deutsch" Style="{StaticResource ModernComboBoxItem}"/>
+                            <ComboBoxItem Content="Français" Style="{StaticResource ModernComboBoxItem}"/>
+                            <ComboBoxItem Content="Español" Style="{StaticResource ModernComboBoxItem}"/>
+                        </ComboBox>
+
+                        <CheckBox x:Name="ShowFileExtensionsCheckBox" 
+                                 Content="Show file extensions in file list"
+                                 Style="{StaticResource ModernCheckBox}"
+                                 IsChecked="True"/>
+
+                        <CheckBox x:Name="ShowToolTipsCheckBox" 
+                                 Content="Show detailed tooltips"
+                                 Style="{StaticResource ModernCheckBox}"
+                                 IsChecked="True"/>
+
+                        <CheckBox x:Name="MinimizeToTrayCheckBox" 
+                                 Content="Minimize to system tray"
+                                 Style="{StaticResource ModernCheckBox}"/>
+
+                        <Label Content="Font size:" Style="{StaticResource ModernLabel}" Margin="0,12,0,4"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Slider x:Name="FontSizeSlider" 
+                                   Style="{StaticResource ModernSlider}"
+                                   Minimum="8" Maximum="18" Value="12"
+                                   TickFrequency="1" IsSnapToTickEnabled="True"
+                                   PreviewMouseWheel="Slider_PreviewMouseWheel"/>
+                            <TextBlock Grid.Column="1" 
+                                      Text="{Binding ElementName=FontSizeSlider, Path=Value, StringFormat='{}{0}pt'}"
+                                      Foreground="{StaticResource TextBrush}"
+                                      VerticalAlignment="Center"
+                                      Margin="12,0,0,0"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Advanced Settings Section -->
+                <StackPanel Orientation="Horizontal" Margin="0,16,0,12">
+                    <Path Fill="{StaticResource TextBrush}" Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center" Stretch="Uniform"
+                          Data="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm109.94-52.79a8,8,0,0,0-3.89-5.4l-29.83-17-.12-33.62a8,8,0,0,0-2.83-6.08,111.91,111.91,0,0,0-36.72-20.67,8,8,0,0,0-6.46.59L128,41.85,97.88,25a8,8,0,0,0-6.47-.6A112.1,112.1,0,0,0,54.73,45.15a8,8,0,0,0-2.83,6.07l-.15,33.65-29.83,17a8,8,0,0,0-3.89,5.4,106.47,106.47,0,0,0,0,41.56,8,8,0,0,0,3.89,5.4l29.83,17,.12,33.62a8,8,0,0,0,2.83,6.08,111.91,111.91,0,0,0,36.72,20.67,8,8,0,0,0,6.46-.59L128,214.15,158.12,231a7.91,7.91,0,0,0,3.9,1,8.09,8.09,0,0,0,2.57-.42,112.1,112.1,0,0,0,36.68-20.73,8,8,0,0,0,2.83-6.07l.15-33.65,29.83-17a8,8,0,0,0,3.89-5.4A106.47,106.47,0,0,0,237.94,107.21Zm-15,34.91-28.57,16.25a8,8,0,0,0-3,3c-.58,1-1.19,2.06-1.81,3.06a7.94,7.94,0,0,0-1.22,4.21l-.15,32.25a95.89,95.89,0,0,1-25.37,14.3L134,199.13a8,8,0,0,0-3.91-1h-.19c-1.21,0-2.43,0-3.64,0a8.08,8.08,0,0,0-4.1,1l-28.84,16.1A96,96,0,0,1,67.88,201l-.11-32.2a8,8,0,0,0-1.22-4.22c-.62-1-1.23-2-1.8-3.06a8.09,8.09,0,0,0-3-3.06l-28.6-16.29a90.49,90.49,0,0,1,0-28.26L61.67,97.63a8,8,0,0,0,3-3c.58-1,1.19-2.06,1.81-3.06a7.94,7.94,0,0,0,1.22-4.21l.15-32.25a95.89,95.89,0,0,1,25.37-14.3L122,56.87a8,8,0,0,0,4.1,1c1.21,0,2.43,0,3.64,0a8.08,8.08,0,0,0,4.1-1l28.84-16.1A96,96,0,0,1,188.12,55l.11,32.2a8,8,0,0,0,1.22,4.22c.62,1,1.23,2,1.8,3.06a8.09,8.09,0,0,0,3,3.06l28.6,16.29A90.49,90.49,0,0,1,222.9,142.12Z"/>
+                    <TextBlock Text="Advanced Settings" 
+                               Foreground="{StaticResource TextBrush}" 
+                               FontSize="16" 
+                               FontWeight="Bold" 
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+                <Border Background="{StaticResource SecondaryBrush}" 
+                        BorderBrush="{StaticResource BorderBrush}" 
+                        BorderThickness="1" 
+                        CornerRadius="6" 
+                        Padding="16" 
+                        Margin="0,0,0,16">
+                    <StackPanel>
+                        <CheckBox x:Name="EnableLoggingCheckBox" 
+                                 Content="Enable detailed logging"
+                                 Style="{StaticResource ModernCheckBox}"/>
+
+                        <CheckBox x:Name="CheckForUpdatesCheckBox" 
+                                 Content="Check for updates on startup"
+                                 Style="{StaticResource ModernCheckBox}"
+                                 IsChecked="True"/>
+
+                        <CheckBox x:Name="SendUsageStatsCheckBox" 
+                                 Content="Send anonymous usage statistics"
+                                 Style="{StaticResource ModernCheckBox}"/>
+
+                        <Label Content="Cache directory:" Style="{StaticResource ModernLabel}" Margin="0,12,0,4"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="CacheDirectoryTextBox" 
+                                    Style="{StaticResource ModernTextBox}"
+                                    Text="C:\Users\{Username}\AppData\Local\TID3\Cache"
+                                    PreviewMouseWheel="TextBox_PreviewMouseWheel"/>
+                            <Button Grid.Column="1" Content="Browse" 
+                                   Click="BrowseCacheDirectory_Click"
+                                   Style="{StaticResource ModernButton}"
+                                   Margin="8,0,0,0"/>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                            <Button Content="Clear Cache" 
+                                    Click="ClearCache_Click" 
+                                    Style="{StaticResource ModernButton}"
+                                    Background="{StaticResource WarningBrush}"/>
+                            <Button Content="Reset All" 
+                                    Click="ResetSettings_Click" 
+                                    Style="{StaticResource ModernButton}"
+                                    Background="{StaticResource DangerBrush}"
+                                    Margin="8,0,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- About Section -->
+                <StackPanel Orientation="Horizontal" Margin="0,16,0,12">
+                    <Path Fill="{StaticResource TextBrush}" Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center" Stretch="Uniform"
+                          Data="M211.75,44.25C195,27.47,170.37,20.79,142.46,25.44c-26.91,4.49-53.87,19.09-75.9,41.12s-36.63,49-41.12,75.9c-4.65,27.91,2,52.51,18.81,69.29C57.54,225.05,75.75,232,96.62,232a103.66,103.66,0,0,0,16.92-1.44c26.91-4.49,53.87-19.09,75.9-41.12s36.63-49,41.12-75.9C235.21,85.63,228.53,61,211.75,44.25ZM77.87,77.87C102.56,53.19,133,39.93,159.15,39.93a62.26,62.26,0,0,1,29,6.67A108.48,108.48,0,0,0,157.1,63.54c-19.2,15.16-31.63,36.32-36.94,62.89-9.72,48.58-44.7,65.18-67.48,70.84C28.71,168.76,39.4,116.35,77.87,77.87ZM178.13,178.13c-34.69,34.68-80.71,46.78-110.32,31.27A108.72,108.72,0,0,0,98.9,192.46c19.2-15.16,31.63-36.32,36.94-62.89,9.72-48.58,44.7-65.18,67.48-70.84C227.29,87.24,216.6,139.65,178.13,178.13Z"/>
+                    <TextBlock Text="About" 
+                               Foreground="{StaticResource TextBrush}" 
+                               FontSize="16" 
+                               FontWeight="Bold" 
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+                <Border Background="{StaticResource SecondaryBrush}" 
+                        BorderBrush="{StaticResource BorderBrush}" 
+                        BorderThickness="1" 
+                        CornerRadius="6" 
+                        Padding="16" 
+                        Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="TID3 - Advanced ID3 Tag Editor"
+                                  FontWeight="Bold"
+                                  FontSize="14"
+                                  Foreground="{StaticResource TextBrush}"/>
+                        <TextBlock x:Name="VersionTextBlock"
+                                  Text="Version Loading..."
+                                  Foreground="{StaticResource SubTextBrush}"
+                                  Margin="0,4,0,4"/>
+                        <TextBlock Text="by Carsten Wittebrock"
+                                  Foreground="{StaticResource SubTextBrush}"
+                                  FontStyle="Italic"
+                                  Margin="0,0,0,8"/>
+                        <TextBlock Text="Professional ID3 tag editor with batch processing and online database integration."
+                                  Foreground="{StaticResource SubTextBrush}"
+                                  TextWrapping="Wrap"
+                                  Margin="0,0,0,8"/>
+                        <TextBlock>
+                            <Hyperlink NavigateUri="https://github.com/yourusername/TID3" 
+                                      RequestNavigate="Hyperlink_RequestNavigate"
+                                      Foreground="{StaticResource PrimaryBrush}">
+                                Visit project on GitHub
+                            </Hyperlink>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Bottom Buttons -->
+        <StackPanel Grid.Row="2" 
+                    Orientation="Horizontal" 
+                    HorizontalAlignment="Right"
+                    Margin="0,16,0,0">
+            <Button Click="Save_Click" 
+                    Style="{StaticResource ModernButton}"
+                    Background="{StaticResource SuccessBrush}">
+                <StackPanel Orientation="Horizontal">
+                    <Path Fill="{StaticResource TextBrush}" Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center" Stretch="Uniform"
+                          Data="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"/>
+                    <TextBlock Text="Save" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button Click="Reset_Click" 
+                    Style="{StaticResource ModernButton}"
+                    Background="{StaticResource WarningBrush}">
+                <StackPanel Orientation="Horizontal">
+                    <Path Fill="{StaticResource TextBrush}" Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center" Stretch="Uniform"
+                          Data="M12,4C14,4 16,5 17,7H20V9H15L16.5,7.5C15.8,6.6 14,6 12,6C8.7,6 6,8.7 6,12C6,15.3 8.7,18 12,18C15.3,18 18,15.3 18,12H20C20,16.4 16.4,20 12,20C7.6,20 4,16.4 4,12C4,7.6 7.6,4 12,4Z"/>
+                    <TextBlock Text="Reset" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button Click="Cancel_Click" 
+                    Style="{StaticResource ModernButton}"
+                    Background="#FF6C757D">
+                <StackPanel Orientation="Horizontal">
+                    <Path Fill="{StaticResource TextBrush}" Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center" Stretch="Uniform"
+                          Data="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/>
+                    <TextBlock Text="Cancel" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+        </StackPanel>
+    </Grid>
+</Window>
