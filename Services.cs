@@ -227,20 +227,66 @@ namespace TID3
 
         private static string GetDiscogsArtistString(JsonElement element)
         {
-            if (element.TryGetProperty("artist", out var artistElement) && artistElement.ValueKind == JsonValueKind.Array)
+            // Try to get artist from basic_information first (common in search results)
+            if (element.TryGetProperty("basic_information", out var basicInfo))
             {
-                var artists = new List<string>();
-                foreach (var artist in artistElement.EnumerateArray())
+                if (basicInfo.TryGetProperty("artists", out var artistsElement) && artistsElement.ValueKind == JsonValueKind.Array)
                 {
-                    if (artist.ValueKind == JsonValueKind.String)
+                    var artists = new List<string>();
+                    foreach (var artist in artistsElement.EnumerateArray())
                     {
-                        var artistName = artist.GetString();
-                        if (!string.IsNullOrEmpty(artistName))
-                            artists.Add(artistName);
+                        if (artist.TryGetProperty("name", out var nameElement))
+                        {
+                            var artistName = nameElement.GetString();
+                            if (!string.IsNullOrEmpty(artistName))
+                                artists.Add(artistName);
+                        }
+                    }
+                    if (artists.Count > 0)
+                        return string.Join(", ", artists);
+                }
+            }
+
+            // Try direct artist field as string
+            if (element.TryGetProperty("artist", out var artistElement))
+            {
+                if (artistElement.ValueKind == JsonValueKind.String)
+                {
+                    var artistName = artistElement.GetString();
+                    if (!string.IsNullOrEmpty(artistName))
+                        return artistName;
+                }
+                else if (artistElement.ValueKind == JsonValueKind.Array)
+                {
+                    var artists = new List<string>();
+                    foreach (var artist in artistElement.EnumerateArray())
+                    {
+                        if (artist.ValueKind == JsonValueKind.String)
+                        {
+                            var artistName = artist.GetString();
+                            if (!string.IsNullOrEmpty(artistName))
+                                artists.Add(artistName);
+                        }
+                    }
+                    if (artists.Count > 0)
+                        return string.Join(", ", artists);
+                }
+            }
+
+            // Try to extract artist from title (format: "Artist - Album")
+            if (element.TryGetProperty("title", out var titleElement))
+            {
+                var title = titleElement.GetString();
+                if (!string.IsNullOrEmpty(title) && title.Contains(" - "))
+                {
+                    var parts = title.Split(new[] { " - " }, 2, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 2 && !string.IsNullOrEmpty(parts[0]))
+                    {
+                        return parts[0].Trim();
                     }
                 }
-                return artists.Count > 0 ? string.Join(", ", artists) : "Unknown Artist";
             }
+
             return "Unknown Artist";
         }
 
@@ -279,10 +325,39 @@ namespace TID3
 
         private static int GetDiscogsTrackCount(JsonElement element)
         {
-            // Check if tracklist is available in search results
-            if (element.TryGetProperty("tracklist", out var tracklistElement) && tracklistElement.ValueKind == JsonValueKind.Array)
+            // Check basic_information for tracklist first (common in search results)
+            if (element.TryGetProperty("basic_information", out var basicInfo))
             {
-                return tracklistElement.GetArrayLength();
+                if (basicInfo.TryGetProperty("tracklist", out var tracklistElement) && tracklistElement.ValueKind == JsonValueKind.Array)
+                {
+                    return tracklistElement.GetArrayLength();
+                }
+                
+                // Check for formats in basic_information
+                if (basicInfo.TryGetProperty("formats", out var formatsElement) && formatsElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var format in formatsElement.EnumerateArray())
+                    {
+                        if (format.TryGetProperty("descriptions", out var descriptionsElement) && descriptionsElement.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var desc in descriptionsElement.EnumerateArray())
+                            {
+                                var descStr = desc.GetString() ?? "";
+                                var trackMatch = System.Text.RegularExpressions.Regex.Match(descStr, @"(\d+)\s*tracks?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                if (trackMatch.Success && int.TryParse(trackMatch.Groups[1].Value, out int trackCount))
+                                {
+                                    return trackCount;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check if tracklist is available in search results
+            if (element.TryGetProperty("tracklist", out var tracklistElement2) && tracklistElement2.ValueKind == JsonValueKind.Array)
+            {
+                return tracklistElement2.GetArrayLength();
             }
 
             // Check if format information contains track count
@@ -300,6 +375,17 @@ namespace TID3
                             return trackCount;
                         }
                     }
+                }
+            }
+
+            // Try to extract from title if it contains track count info
+            if (element.TryGetProperty("title", out var titleElement))
+            {
+                var title = titleElement.GetString() ?? "";
+                var trackMatch = System.Text.RegularExpressions.Regex.Match(title, @"(\d+)\s*tracks?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (trackMatch.Success && int.TryParse(trackMatch.Groups[1].Value, out int trackCount))
+                {
+                    return trackCount;
                 }
             }
 

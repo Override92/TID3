@@ -42,7 +42,7 @@ namespace TID3
                     if (!string.IsNullOrEmpty(fileVersion.FileVersion))
                     {
                         var buildDate = DateTime.MinValue.AddDays(version.Build);
-                        VersionTextBlock.Text += $" (Build #{version.Revision})";
+                        VersionTextBlock.Text += $" (discogs search resultsBuild #{version.Revision})";
                     }
                 }
                 else

@@ -555,7 +555,7 @@
                         <Button Margin="0,0,12,0" Click="SaveSelected_Click" Style="{StaticResource ModernButton}">
                             <StackPanel Orientation="Horizontal">
                                 <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
-                                      Data="M219.31,80,176,36.69A15.86,15.86,0,0,0,164.69,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V91.31A15.86,15.86,0,0,0,219.31,80ZM168,48l32,32H168Zm40,160H48V48H152V88a8,8,0,0,0,8,8h48V208Z M96,136a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H112v24a8,8,0,0,1-16,0Z"/>
+                                      Data="M208,32H83.31A15.86,15.86,0,0,0,72,36.69L36.69,72A15.86,15.86,0,0,0,32,83.31V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM88,48h80V80H88ZM208,208H48V83.31l24-24V80A16,16,0,0,0,88,96h80a16,16,0,0,0,16-16V48h24Zm-80-96a40,40,0,1,0,40,40A40,40,0,0,0,128,112Zm0,64a24,24,0,1,1,24-24A24,24,0,0,1,128,176Z"/>
                                 <TextBlock Text="Save This File" Margin="6,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
