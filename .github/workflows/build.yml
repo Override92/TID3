@@ -31,7 +31,7 @@ jobs:
         BUILD_COUNTER: ${{ github.run_number }}
 
     - name: Publish Self-Contained Executable
-      run: dotnet publish TID3.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish --no-build
+      run: dotnet publish TID3.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish
       env:
         BUILD_COUNTER: ${{ github.run_number }}
 
