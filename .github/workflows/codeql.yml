@@ -1,4 +1,3 @@
-      contents: read
 name: "CodeQL Analysis"
 
 on:
