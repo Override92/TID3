@@ -1,12 +1,16 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using System.Windows.Media;
+using System.Windows.Controls;
 using Microsoft.Win32;
 
 namespace TID3
@@ -19,6 +23,7 @@ namespace TID3
         private readonly TagService _tagService;
         private readonly MusicBrainzService _musicBrainzService;
         private readonly DiscogsService _discogsService;
+        private readonly UpdateService _updateService;
         private readonly ObservableCollection<AudioFileInfo> _audioFiles;
         private readonly ObservableCollection<OnlineSourceItem> _onlineSourceItems;
 
@@ -67,6 +72,7 @@ namespace TID3
             _tagService = new TagService();
             _musicBrainzService = new MusicBrainzService();
             _discogsService = new DiscogsService();
+            _updateService = new UpdateService();
             _audioFiles = new ObservableCollection<AudioFileInfo>();
             _onlineSourceItems = new ObservableCollection<OnlineSourceItem>();
 
@@ -86,6 +92,161 @@ namespace TID3
                     UpdateChangeHistoryDisplay();
                 }
             };
+
+            // Subscribe to window size changes for efficient scrollbar rendering
+            SizeChanged += MainWindow_SizeChanged_ScrollOptimization;
+            
+            // Subscribe to window state changes for real-time saving
+            StateChanged += MainWindow_StateChanged;
+            LocationChanged += MainWindow_LocationChanged;
+        }
+
+        private bool _isResizing = false;
+        private DispatcherTimer? _scrollbarOptimizationTimer;
+
+        // Removed automatic resize timer - caused unpredictable behavior
+
+        private void MainWindow_SizeChanged_ScrollOptimization(object sender, SizeChangedEventArgs e)
+        {
+            OptimizeScrollbarRenderingDuringResize();
+        }
+
+        private void OptimizeScrollbarRenderingDuringResize()
+        {
+            try
+            {
+                var dataGrid = FindDataGrid();
+                if (dataGrid == null) return;
+
+                if (!_isResizing)
+                {
+                    // Start resize optimization
+                    _isResizing = true;
+                    
+                    // Temporarily disable smooth scrolling for better performance
+                    var scrollViewer = FindVisualChild<ScrollViewer>(dataGrid);
+                    if (scrollViewer != null)
+                    {
+                        scrollViewer.IsDeferredScrollingEnabled = false;
+                        scrollViewer.CanContentScroll = false; // Use pixel scrolling for smoother resize
+                    }
+                }
+
+                // Reset or create the optimization timer
+                if (_scrollbarOptimizationTimer == null)
+                {
+                    _scrollbarOptimizationTimer = new DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromMilliseconds(150)
+                    };
+                    _scrollbarOptimizationTimer.Tick += ScrollbarOptimizationTimer_Tick;
+                }
+
+                _scrollbarOptimizationTimer.Stop();
+                _scrollbarOptimizationTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Scrollbar optimization error: {ex.Message}");
+            }
+        }
+
+        private void ScrollbarOptimizationTimer_Tick(object? sender, EventArgs e)
+        {
+            try
+            {
+                // Resize operation has finished, restore normal scrolling behavior
+                _scrollbarOptimizationTimer?.Stop();
+                _isResizing = false;
+
+                var dataGrid = FindDataGrid();
+                if (dataGrid != null)
+                {
+                    var scrollViewer = FindVisualChild<ScrollViewer>(dataGrid);
+                    if (scrollViewer != null)
+                    {
+                        // Restore deferred scrolling and content scrolling
+                        scrollViewer.IsDeferredScrollingEnabled = true;
+                        scrollViewer.CanContentScroll = true;
+                        
+                        // Force scrollviewer to update its layout
+                        scrollViewer.InvalidateScrollInfo();
+                        scrollViewer.UpdateLayout();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Scrollbar optimization timer error: {ex.Message}");
+            }
+        }
+
+        private void MainWindow_StateChanged(object? sender, EventArgs e)
+        {
+            try
+            {
+                // Save window state changes immediately
+                var settings = SettingsManager.LoadSettings();
+                if (settings.RememberWindowState)
+                {
+                    settings.WindowState = (int)WindowState;
+                    settings.WindowMaximized = WindowState == WindowState.Maximized;
+                    settings.WindowMinimized = WindowState == WindowState.Minimized;
+                    SettingsManager.SaveSettings(settings);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error saving window state: {ex.Message}");
+            }
+        }
+
+        private void MainWindow_LocationChanged(object? sender, EventArgs e)
+        {
+            try
+            {
+                // Debounce location changes to avoid excessive saves during dragging
+                if (_locationChangeTimer == null)
+                {
+                    _locationChangeTimer = new DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromMilliseconds(500)
+                    };
+                    _locationChangeTimer.Tick += LocationChangeTimer_Tick;
+                }
+
+                _locationChangeTimer.Stop();
+                _locationChangeTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error handling location change: {ex.Message}");
+            }
+        }
+
+        private DispatcherTimer? _locationChangeTimer;
+
+        private void LocationChangeTimer_Tick(object? sender, EventArgs e)
+        {
+            try
+            {
+                _locationChangeTimer?.Stop();
+                
+                // Save window position if in normal state
+                var settings = SettingsManager.LoadSettings();
+                if (settings.RememberWindowState && WindowState == WindowState.Normal)
+                {
+                    settings.WindowX = Left;
+                    settings.WindowY = Top;
+                    settings.WindowWidth = Width;
+                    settings.WindowHeight = Height;
+                    SettingsManager.SaveSettings(settings);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error saving window location: {ex.Message}");
+            }
         }
 
         private void SelectedFile_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -154,18 +315,29 @@ namespace TID3
             {
                 await Task.Run(() =>
                 {
+                    var loadedFiles = new List<AudioFileInfo>();
                     foreach (var fileName in filePaths)
                     {
-                        Application.Current.Dispatcher.Invoke(() =>
+                        var audioFile = _tagService.LoadFile(fileName);
+                        if (audioFile != null)
                         {
-                            var audioFile = _tagService.LoadFile(fileName);
-                            if (audioFile != null)
-                            {
-                                audioFile.CreateSnapshot(); // Create initial snapshot for comparison
-                                _audioFiles.Add(audioFile);
-                            }
-                        });
+                            audioFile.CreateSnapshot(); // Create initial snapshot for comparison
+                            loadedFiles.Add(audioFile);
+                        }
                     }
+
+                    // Sort by album, then by track number
+                    var sortedFiles = loadedFiles.OrderBy(f => f.Album ?? "").ThenBy(f => f.Track).ToList();
+
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        foreach (var file in sortedFiles)
+                        {
+                            _audioFiles.Add(file);
+                        }
+                        
+                        // Note: Removed auto-fit on load - users can manually trigger via context menu
+                    });
                 });
 
                 UpdateStatus($"Successfully loaded {_audioFiles.Count} audio files.");
@@ -241,136 +413,6 @@ namespace TID3
 
         #endregion
 
-        #region Online Database Integration - Legacy Methods (replaced with dropdown)
-
-        // Note: These methods have been replaced with enhanced dropdown functionality
-        // in the Online Source Management section
-
-        private async void SearchMusicBrainz_Click_Legacy(object sender, RoutedEventArgs e)
-        {
-            if (SelectedFile == null)
-            {
-                MessageBox.Show("Please select a file first.", "No File Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var query = $"{SelectedFile.Artist} {SelectedFile.Album}".Trim();
-            if (string.IsNullOrEmpty(query))
-            {
-                query = Path.GetFileNameWithoutExtension(SelectedFile.FileName);
-            }
-
-            if (string.IsNullOrEmpty(query))
-            {
-                MessageBox.Show("Please select a file with artist, album information, or a descriptive filename.",
-                              "Insufficient Information",
-                              MessageBoxButton.OK,
-                              MessageBoxImage.Warning);
-                return;
-            }
-
-            try
-            {
-                UpdateStatus("Searching MusicBrainz database...");
-                var releases = await _musicBrainzService.SearchReleases(query);
-
-                if (!releases.Any())
-                {
-                    MessageBox.Show("No results found on MusicBrainz. Try different search terms.",
-                                  "No Results",
-                                  MessageBoxButton.OK,
-                                  MessageBoxImage.Information);
-                    UpdateStatus("MusicBrainz search completed - no results found.");
-                    return;
-                }
-
-                // For now, show results in a simple message box
-                var message = $"Found {releases.Count} results:\n\n";
-                foreach (var release in releases.Take(5))
-                {
-                    message += $"� {release.Artist} - {release.Title} ({release.Date}) [Score: {release.Score}]\n";
-                }
-                if (releases.Count > 5)
-                    message += $"\n... and {releases.Count - 5} more results";
-
-                // Create comparison with the first result for demonstration
-                if (releases.Any())
-                {
-                    var bestMatch = releases.First();
-                    var newTags = TagSnapshot.FromMusicBrainzRelease(bestMatch, null, SelectedFile);
-                    SelectedFile.UpdateComparison(newTags, "MusicBrainz");
-                    UpdateComparisonDisplay();
-                    
-                    // Automatically switch to tag comparison tab
-                    InfoTabControl.SelectedIndex = 1;
-                }
-
-                MessageBox.Show(message, "MusicBrainz Results", MessageBoxButton.OK, MessageBoxImage.Information);
-                UpdateStatus($"Found {releases.Count} MusicBrainz results.");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error searching MusicBrainz: {ex.Message}", "Search Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                UpdateStatus("MusicBrainz search failed.");
-            }
-        }
-
-        private async void SearchDiscogs_Click_Legacy(object sender, RoutedEventArgs e)
-        {
-            if (SelectedFile == null)
-            {
-                MessageBox.Show("Please select a file first.", "No File Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var query = $"{SelectedFile.Artist} {SelectedFile.Album}".Trim();
-            if (string.IsNullOrEmpty(query))
-            {
-                query = Path.GetFileNameWithoutExtension(SelectedFile.FileName);
-            }
-
-            try
-            {
-                UpdateStatus("Searching Discogs database...");
-                var releases = await _discogsService.SearchReleases(query);
-
-                if (!releases.Any())
-                {
-                    MessageBox.Show("No results found on Discogs. Try different search terms.",
-                                  "No Results",
-                                  MessageBoxButton.OK,
-                                  MessageBoxImage.Information);
-                    return;
-                }
-
-                var message = $"Found {releases.Count} Discogs results!\n\n";
-                foreach (var release in releases.Take(3))
-                {
-                    message += $"� {release.Artist} - {release.Title} ({release.Year})\n";
-                }
-
-                // Create comparison with the first result for demonstration
-                if (releases.Any())
-                {
-                    var bestMatch = releases.First();
-                    var newTags = TagSnapshot.FromDiscogsRelease(bestMatch, null, SelectedFile);
-                    SelectedFile.UpdateComparison(newTags, "Discogs");
-                    UpdateComparisonDisplay();
-                    
-                    // Automatically switch to tag comparison tab
-                    InfoTabControl.SelectedIndex = 1;
-                }
-
-                MessageBox.Show(message, "Discogs Results", MessageBoxButton.OK, MessageBoxImage.Information);
-                UpdateStatus($"Found {releases.Count} results on Discogs.");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error searching Discogs: {ex.Message}", "Search Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        #endregion
 
         #region Batch Operations
 
@@ -399,8 +441,7 @@ namespace TID3
                 if (settingsWindow.ShowDialog() == true)
                 {
                     // Reload settings and apply changes
-                    var settingsManager = new SettingsManager();
-                    var settings = settingsManager.LoadSettings();
+                    var settings = SettingsManager.LoadSettings();
                     ApplySettings(settings);
                     UpdateStatus("Settings applied successfully.");
                 }
@@ -435,16 +476,34 @@ namespace TID3
                 return;
             }
 
-            var result = MessageBox.Show($"Are you sure you want to clear all {_audioFiles.Count} files from the list?\n\nUnsaved changes will be lost.",
-                                       "Confirm Clear",
-                                       MessageBoxButton.YesNo,
-                                       MessageBoxImage.Question);
+            bool hasUnsavedChanges = HasUnsavedChanges();
+            MessageBoxResult result = MessageBoxResult.Yes;
+
+            if (hasUnsavedChanges)
+            {
+                result = MessageBox.Show($"Are you sure you want to clear all {_audioFiles.Count} files from the list?\n\nUnsaved changes will be lost.",
+                                           "Confirm Clear",
+                                           MessageBoxButton.YesNo,
+                                           MessageBoxImage.Question);
+            }
 
             if (result == MessageBoxResult.Yes)
             {
+                // Clean up memory for each file before clearing
+                foreach (var file in _audioFiles)
+                {
+                    file.Cleanup();
+                }
+                
                 _audioFiles.Clear();
                 SelectedFile = null!;
-                UpdateStatus("File list cleared.");
+                
+                // Force garbage collection to reclaim memory immediately
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                
+                UpdateStatus("File list cleared and memory cleaned up.");
             }
         }
 
@@ -1081,6 +1140,31 @@ namespace TID3
 
         #endregion
 
+        #region Utility Methods
+
+        private System.Windows.Controls.DataGrid? FindDataGrid()
+        {
+            // Find the main DataGrid by walking the visual tree
+            return FindVisualChild<System.Windows.Controls.DataGrid>(this);
+        }
+
+        private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T result)
+                    return result;
+
+                var childOfChild = FindVisualChild<T>(child);
+                if (childOfChild != null)
+                    return childOfChild;
+            }
+            return null;
+        }
+
+        #endregion
+
         #region INotifyPropertyChanged Implementation
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -1088,6 +1172,335 @@ namespace TID3
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+
+        #endregion
+
+        #region Update Checking
+
+        private async void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            await CheckForUpdatesOnStartup();
+            LoadWindowAndColumnSettings();
+        }
+
+        private void LoadWindowAndColumnSettings()
+        {
+            try
+            {
+                var settings = SettingsManager.LoadSettings();
+                
+                if (settings.RememberWindowState)
+                {
+                    // Restore window size first
+                    Width = settings.WindowWidth;
+                    Height = settings.WindowHeight;
+                    
+                    // Restore window position if available
+                    if (!double.IsNaN(settings.WindowX) && !double.IsNaN(settings.WindowY))
+                    {
+                        Left = settings.WindowX;
+                        Top = settings.WindowY;
+                        
+                        // Ensure window is still visible on current screen setup
+                        EnsureWindowVisible();
+                    }
+                    else if (settings.CenterOnStartup)
+                    {
+                        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                    }
+                    
+                    // Restore window state (Normal, Minimized, Maximized)
+                    switch (settings.WindowState)
+                    {
+                        case 1:
+                            WindowState = WindowState.Minimized;
+                            break;
+                        case 2:
+                            WindowState = WindowState.Maximized;
+                            break;
+                        default:
+                            WindowState = WindowState.Normal;
+                            break;
+                    }
+                }
+
+                // Restore column widths if enabled
+                if (settings.RememberColumnWidths)
+                {
+                    RestoreColumnWidths(settings.ColumnWidths);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error loading window/column settings: {ex.Message}");
+                // Fallback to default window state
+                WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            }
+        }
+
+        private void EnsureWindowVisible()
+        {
+            try
+            {
+                // Get current window bounds
+                var windowBounds = new System.Windows.Rect(Left, Top, Width, Height);
+                
+                // Check if window intersects with any screen
+                bool isVisible = false;
+                foreach (var screen in System.Windows.Forms.Screen.AllScreens)
+                {
+                    var screenBounds = new System.Windows.Rect(
+                        screen.WorkingArea.X, screen.WorkingArea.Y, 
+                        screen.WorkingArea.Width, screen.WorkingArea.Height);
+                    
+                    if (windowBounds.IntersectsWith(screenBounds))
+                    {
+                        isVisible = true;
+                        break;
+                    }
+                }
+                
+                if (!isVisible)
+                {
+                    // Move window to primary screen
+                    var primaryScreen = System.Windows.Forms.Screen.PrimaryScreen?.WorkingArea;
+                    if (primaryScreen.HasValue)
+                    {
+                        Left = primaryScreen.Value.X + (primaryScreen.Value.Width - Width) / 2;
+                        Top = primaryScreen.Value.Y + (primaryScreen.Value.Height - Height) / 2;
+                    }
+                    else
+                    {
+                        // Fallback to WPF centering if no primary screen found
+                        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                    }
+                }
+            }
+            catch
+            {
+                // Fallback: center on screen
+                WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            }
+        }
+
+        private void RestoreColumnWidths(double[] columnWidths)
+        {
+            try
+            {
+                var dataGrid = FindDataGrid();
+                if (dataGrid == null || columnWidths == null) return;
+
+                var columns = dataGrid.Columns.OfType<DataGridTextColumn>().ToArray();
+                
+                for (int i = 0; i < Math.Min(columns.Length, columnWidths.Length); i++)
+                {
+                    columns[i].Width = new DataGridLength(columnWidths[i], DataGridLengthUnitType.Star);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error restoring column widths: {ex.Message}");
+            }
+        }
+
+        private void SaveWindowAndColumnSettings()
+        {
+            try
+            {
+                var settings = SettingsManager.LoadSettings();
+                
+                if (settings.RememberWindowState)
+                {
+                    // Save current window state
+                    settings.WindowState = (int)WindowState;
+                    settings.WindowMaximized = WindowState == WindowState.Maximized;
+                    settings.WindowMinimized = WindowState == WindowState.Minimized;
+                    
+                    // Save window position and size only when in Normal state
+                    if (WindowState == WindowState.Normal)
+                    {
+                        settings.WindowX = Left;
+                        settings.WindowY = Top;
+                        settings.WindowWidth = Width;
+                        settings.WindowHeight = Height;
+                    }
+                    else
+                    {
+                        // For maximized/minimized states, save the restore bounds
+                        if (RestoreBounds != System.Windows.Rect.Empty)
+                        {
+                            settings.WindowX = RestoreBounds.X;
+                            settings.WindowY = RestoreBounds.Y;
+                            settings.WindowWidth = RestoreBounds.Width;
+                            settings.WindowHeight = RestoreBounds.Height;
+                        }
+                    }
+                }
+
+                // Save column widths if enabled
+                if (settings.RememberColumnWidths)
+                {
+                    var columnWidths = GetCurrentColumnWidths();
+                    if (columnWidths != null && columnWidths.Length > 0)
+                    {
+                        settings.ColumnWidths = columnWidths;
+                    }
+                }
+
+                SettingsManager.SaveSettings(settings);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error saving window/column settings: {ex.Message}");
+            }
+        }
+
+        private double[]? GetCurrentColumnWidths()
+        {
+            try
+            {
+                var dataGrid = FindDataGrid();
+                if (dataGrid == null) return null;
+
+                var columns = dataGrid.Columns.OfType<DataGridTextColumn>().ToArray();
+                var widths = new double[columns.Length];
+
+                for (int i = 0; i < columns.Length; i++)
+                {
+                    if (columns[i].Width.IsStar)
+                    {
+                        widths[i] = columns[i].Width.Value;
+                    }
+                    else
+                    {
+                        // Convert pixel width to approximate star value based on current total width
+                        var totalWidth = dataGrid.ActualWidth;
+                        widths[i] = totalWidth > 0 ? columns[i].ActualWidth / (totalWidth / 11.9) : 1.0; // 11.9 is sum of default star values
+                    }
+                }
+
+                return widths;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private async Task CheckForUpdatesOnStartup()
+        {
+            try
+            {
+                var settings = SettingsManager.LoadSettings();
+                
+                if (!settings.CheckForUpdates)
+                    return;
+
+                if (!_updateService.ShouldCheckForUpdates(settings.LastUpdateCheck))
+                    return;
+
+                var updateInfo = await _updateService.CheckForUpdatesAsync();
+                if (updateInfo != null && _updateService.IsUpdateAvailable(settings.Version, updateInfo))
+                {
+                    ShowUpdateNotification(updateInfo);
+                }
+
+                // Update last check time
+                settings.LastUpdateCheck = DateTime.Now;
+                SettingsManager.SaveSettings(settings);
+            }
+            catch
+            {
+                // Silently fail - don't interrupt user experience
+            }
+        }
+
+        public async Task<UpdateInfo?> CheckForUpdatesManually()
+        {
+            try
+            {
+                var settings = SettingsManager.LoadSettings();
+                var updateInfo = await _updateService.CheckForUpdatesAsync();
+                
+                if (updateInfo != null)
+                {
+                    settings.LastUpdateCheck = DateTime.Now;
+                    SettingsManager.SaveSettings(settings);
+                    
+                    if (_updateService.IsUpdateAvailable(settings.Version, updateInfo))
+                    {
+                        return updateInfo;
+                    }
+                }
+                
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private void ShowUpdateNotification(UpdateInfo updateInfo)
+        {
+            var message = $"A new version of TID3 is available!\n\n" +
+                         $"Current Version: {SettingsManager.LoadSettings().Version}\n" +
+                         $"Latest Version: {updateInfo.Version}\n" +
+                         $"Released: {updateInfo.PublishedAt:yyyy-MM-dd}\n\n" +
+                         $"Would you like to download the update?";
+
+            var result = MessageBox.Show(message, "Update Available", 
+                MessageBoxButton.YesNo, MessageBoxImage.Information);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = updateInfo.DownloadUrl,
+                        UseShellExecute = true
+                    });
+                }
+                catch
+                {
+                    MessageBox.Show("Could not open the download page. Please visit the GitHub releases page manually.",
+                        "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            // Save window and column settings before closing
+            SaveWindowAndColumnSettings();
+            
+            // Cleanup resources
+            _updateService?.Dispose();
+            
+            // Cleanup scrollbar optimization timer
+            if (_scrollbarOptimizationTimer != null)
+            {
+                _scrollbarOptimizationTimer.Stop();
+                _scrollbarOptimizationTimer.Tick -= ScrollbarOptimizationTimer_Tick;
+                _scrollbarOptimizationTimer = null;
+            }
+            
+            // Cleanup location change timer
+            if (_locationChangeTimer != null)
+            {
+                _locationChangeTimer.Stop();
+                _locationChangeTimer.Tick -= LocationChangeTimer_Tick;
+                _locationChangeTimer = null;
+            }
+            
+            // Unsubscribe from events
+            SizeChanged -= MainWindow_SizeChanged_ScrollOptimization;
+            StateChanged -= MainWindow_StateChanged;
+            LocationChanged -= MainWindow_LocationChanged;
+            
+            base.OnClosed(e);
         }
 
         #endregion

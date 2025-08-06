@@ -195,20 +195,24 @@ namespace TID3
 
         public void CreateSnapshot()
         {
-            _originalTags = new TagSnapshot
+            // Only create snapshot when actually needed
+            if (_originalTags == null)
             {
-                Title = Title,
-                Artist = Artist,
-                Album = Album,
-                AlbumArtist = AlbumArtist,
-                Genre = Genre,
-                Year = Year,
-                Track = Track,
-                Comment = Comment
-            };
+                _originalTags = new TagSnapshot
+                {
+                    Title = Title,
+                    Artist = Artist,
+                    Album = Album,
+                    AlbumArtist = AlbumArtist,
+                    Genre = Genre,
+                    Year = Year,
+                    Track = Track,
+                    Comment = Comment
+                };
 
-            UpdateLastModified();
-            AddToHistory("Snapshot Created", "Original tags saved for comparison");
+                UpdateLastModified();
+                // Don't add to history unnecessarily - only when comparison is needed
+            }
         }
 
         public void UpdateComparison(TagSnapshot newTags, string source = "Unknown")
@@ -385,7 +389,6 @@ namespace TID3
         {
             var pending = TagComparison.Count(c => c.CanAccept);
             var accepted = TagComparison.Count(c => c.IsAccepted);
-            var rejected = TagComparison.Count(c => c.IsRejected);
 
             if (pending > 0)
             {
@@ -407,6 +410,25 @@ namespace TID3
         private void UpdateLastModified()
         {
             LastModified = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        }
+
+        public void ClearComparison()
+        {
+            TagComparison?.Clear();
+            _originalTags = null;
+            OnPropertyChanged(nameof(TagComparison));
+        }
+
+        public void ClearHistory()
+        {
+            ChangeHistory?.Clear();
+            OnPropertyChanged(nameof(ChangeHistory));
+        }
+
+        public void Cleanup()
+        {
+            ClearComparison();
+            ClearHistory();
         }
 
         private void AddToHistory(string action, string details)

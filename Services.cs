@@ -13,17 +13,14 @@ namespace TID3
 {
     public class MusicBrainzService
     {
-        private static readonly HttpClient client = new HttpClient();
+        private HttpClient _client;
         private const string BASE_URL = "https://musicbrainz.org/ws/2/";
-        private readonly SettingsManager _settingsManager;
         private AppSettings _settings;
 
         public MusicBrainzService()
         {
-            _settingsManager = new SettingsManager();
-            _settings = _settingsManager.LoadSettings();
-            client.DefaultRequestHeaders.Clear();
-            client.DefaultRequestHeaders.Add("User-Agent", _settings.GetUserAgent());
+            _settings = SettingsManager.LoadSettings();
+            _client = HttpClientManager.CreateClientWithUserAgent(_settings.GetUserAgent());
         }
 
         public async Task<List<MusicBrainzRelease>> SearchReleases(string query)
@@ -31,7 +28,7 @@ namespace TID3
             try
             {
                 var url = $"{BASE_URL}release/?query={Uri.EscapeDataString(query)}&fmt=json&limit=10";
-                var response = await client.GetStringAsync(url);
+                var response = await _client.GetStringAsync(url);
                 using var document = JsonDocument.Parse(response);
                 var data = document.RootElement;
 
@@ -66,7 +63,7 @@ namespace TID3
             try
             {
                 var url = $"{BASE_URL}release/{releaseId}?inc=recordings&fmt=json";
-                var response = await client.GetStringAsync(url);
+                var response = await _client.GetStringAsync(url);
                 using var document = JsonDocument.Parse(response);
                 var data = document.RootElement;
 
@@ -112,9 +109,9 @@ namespace TID3
 
         public void RefreshSettings()
         {
-            _settings = _settingsManager.LoadSettings();
-            client.DefaultRequestHeaders.Clear();
-            client.DefaultRequestHeaders.Add("User-Agent", _settings.GetUserAgent());
+            _settings = SettingsManager.LoadSettings();
+            _client.DefaultRequestHeaders.Clear();
+            _client.DefaultRequestHeaders.Add("User-Agent", _settings.GetUserAgent());
         }
 
         private static string GetArtistFromCredit(JsonElement element)
@@ -171,17 +168,14 @@ namespace TID3
 
     public class DiscogsService
     {
-        private static readonly HttpClient client = new HttpClient();
+        private HttpClient _client;
         private const string BASE_URL = "https://api.discogs.com/";
-        private readonly SettingsManager _settingsManager;
         private AppSettings _settings;
 
         public DiscogsService()
         {
-            _settingsManager = new SettingsManager();
-            _settings = _settingsManager.LoadSettings();
-            client.DefaultRequestHeaders.Clear();
-            client.DefaultRequestHeaders.Add("User-Agent", _settings.GetUserAgent());
+            _settings = SettingsManager.LoadSettings();
+            _client = HttpClientManager.CreateClientWithUserAgent(_settings.GetUserAgent());
         }
 
         public async Task<List<DiscogsRelease>> SearchReleases(string query)
@@ -195,7 +189,7 @@ namespace TID3
                 }
 
                 var url = $"{BASE_URL}database/search?q={Uri.EscapeDataString(query)}&type=release&key={_settings.DiscogsApiKey}&secret={_settings.DiscogsSecret}";
-                var response = await client.GetStringAsync(url);
+                var response = await _client.GetStringAsync(url);
                 using var document = JsonDocument.Parse(response);
                 var data = document.RootElement;
 
@@ -204,10 +198,13 @@ namespace TID3
                 {
                     foreach (var result in resultsElement.EnumerateArray())
                     {
+                        var titleString = result.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "";
+                        var albumTitle = ExtractAlbumFromDiscogsTitle(titleString);
+                        
                         releases.Add(new DiscogsRelease
                         {
                             Id = result.TryGetProperty("id", out var id) ? id.GetInt32() : 0,
-                            Title = result.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
+                            Title = albumTitle,
                             Artist = GetDiscogsArtistString(result),
                             Year = GetDiscogsYearString(result),
                             Genre = GetDiscogsGenreString(result),
@@ -226,27 +223,73 @@ namespace TID3
 
         public void RefreshSettings()
         {
-            _settings = _settingsManager.LoadSettings();
-            client.DefaultRequestHeaders.Clear();
-            client.DefaultRequestHeaders.Add("User-Agent", _settings.GetUserAgent());
+            _settings = SettingsManager.LoadSettings();
+            _client.DefaultRequestHeaders.Clear();
+            _client.DefaultRequestHeaders.Add("User-Agent", _settings.GetUserAgent());
         }
 
         private static string GetDiscogsArtistString(JsonElement element)
         {
-            if (element.TryGetProperty("artist", out var artistElement) && artistElement.ValueKind == JsonValueKind.Array)
+            // Try to get artist from basic_information first (common in search results)
+            if (element.TryGetProperty("basic_information", out var basicInfo))
             {
-                var artists = new List<string>();
-                foreach (var artist in artistElement.EnumerateArray())
+                if (basicInfo.TryGetProperty("artists", out var artistsElement) && artistsElement.ValueKind == JsonValueKind.Array)
                 {
-                    if (artist.ValueKind == JsonValueKind.String)
+                    var artists = new List<string>();
+                    foreach (var artist in artistsElement.EnumerateArray())
                     {
-                        var artistName = artist.GetString();
-                        if (!string.IsNullOrEmpty(artistName))
-                            artists.Add(artistName);
+                        if (artist.TryGetProperty("name", out var nameElement))
+                        {
+                            var artistName = nameElement.GetString();
+                            if (!string.IsNullOrEmpty(artistName))
+                                artists.Add(artistName);
+                        }
+                    }
+                    if (artists.Count > 0)
+                        return string.Join(", ", artists);
+                }
+            }
+
+            // Try direct artist field as string
+            if (element.TryGetProperty("artist", out var artistElement))
+            {
+                if (artistElement.ValueKind == JsonValueKind.String)
+                {
+                    var artistName = artistElement.GetString();
+                    if (!string.IsNullOrEmpty(artistName))
+                        return artistName;
+                }
+                else if (artistElement.ValueKind == JsonValueKind.Array)
+                {
+                    var artists = new List<string>();
+                    foreach (var artist in artistElement.EnumerateArray())
+                    {
+                        if (artist.ValueKind == JsonValueKind.String)
+                        {
+                            var artistName = artist.GetString();
+                            if (!string.IsNullOrEmpty(artistName))
+                                artists.Add(artistName);
+                        }
+                    }
+                    if (artists.Count > 0)
+                        return string.Join(", ", artists);
+                }
+            }
+
+            // Try to extract artist from title (format: "Artist - Album")
+            if (element.TryGetProperty("title", out var titleElement))
+            {
+                var title = titleElement.GetString();
+                if (!string.IsNullOrEmpty(title) && title.Contains(" - "))
+                {
+                    var parts = title.Split(new[] { " - " }, 2, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 2 && !string.IsNullOrEmpty(parts[0]))
+                    {
+                        return parts[0].Trim();
                     }
                 }
-                return artists.Count > 0 ? string.Join(", ", artists) : "Unknown Artist";
             }
+
             return "Unknown Artist";
         }
 
@@ -269,6 +312,26 @@ namespace TID3
             return "";
         }
 
+        private static string ExtractAlbumFromDiscogsTitle(string titleString)
+        {
+            if (string.IsNullOrEmpty(titleString))
+                return "";
+
+            // Discogs title format is typically "Artist - Album"
+            // We want to extract just the album part
+            if (titleString.Contains(" - "))
+            {
+                var parts = titleString.Split(new[] { " - " }, 2, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 2)
+                {
+                    return parts[1].Trim();
+                }
+            }
+
+            // If no " - " separator found, return the full title as album
+            return titleString.Trim();
+        }
+
         private static string GetDiscogsYearString(JsonElement element)
         {
             if (element.TryGetProperty("year", out var yearElement))
@@ -285,10 +348,39 @@ namespace TID3
 
         private static int GetDiscogsTrackCount(JsonElement element)
         {
-            // Check if tracklist is available in search results
-            if (element.TryGetProperty("tracklist", out var tracklistElement) && tracklistElement.ValueKind == JsonValueKind.Array)
+            // Check basic_information for tracklist first (common in search results)
+            if (element.TryGetProperty("basic_information", out var basicInfo))
             {
-                return tracklistElement.GetArrayLength();
+                if (basicInfo.TryGetProperty("tracklist", out var tracklistElement) && tracklistElement.ValueKind == JsonValueKind.Array)
+                {
+                    return tracklistElement.GetArrayLength();
+                }
+                
+                // Check for formats in basic_information
+                if (basicInfo.TryGetProperty("formats", out var formatsElement) && formatsElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var format in formatsElement.EnumerateArray())
+                    {
+                        if (format.TryGetProperty("descriptions", out var descriptionsElement) && descriptionsElement.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var desc in descriptionsElement.EnumerateArray())
+                            {
+                                var descStr = desc.GetString() ?? "";
+                                var trackMatch = System.Text.RegularExpressions.Regex.Match(descStr, @"(\d+)\s*tracks?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                if (trackMatch.Success && int.TryParse(trackMatch.Groups[1].Value, out int trackCount))
+                                {
+                                    return trackCount;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check if tracklist is available in search results
+            if (element.TryGetProperty("tracklist", out var tracklistElement2) && tracklistElement2.ValueKind == JsonValueKind.Array)
+            {
+                return tracklistElement2.GetArrayLength();
             }
 
             // Check if format information contains track count
@@ -306,6 +398,17 @@ namespace TID3
                             return trackCount;
                         }
                     }
+                }
+            }
+
+            // Try to extract from title if it contains track count info
+            if (element.TryGetProperty("title", out var titleElement))
+            {
+                var title = titleElement.GetString() ?? "";
+                var trackMatch = System.Text.RegularExpressions.Regex.Match(title, @"(\d+)\s*tracks?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (trackMatch.Success && int.TryParse(trackMatch.Groups[1].Value, out int trackCount))
+                {
+                    return trackCount;
                 }
             }
 

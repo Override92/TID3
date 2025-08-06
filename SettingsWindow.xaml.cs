@@ -17,13 +17,11 @@ namespace TID3
     /// </summary>
     public partial class SettingsWindow : Window
     {
-        private readonly SettingsManager _settingsManager;
         private AppSettings _currentSettings = null!;
 
         public SettingsWindow()
         {
             InitializeComponent();
-            _settingsManager = new SettingsManager();
             LoadVersion();
             LoadSettings();
         }
@@ -37,11 +35,14 @@ namespace TID3
                 
                 if (version != null)
                 {
-                    VersionTextBlock.Text = $"Version {version.Major}.{version.Minor}.{version.Build}";
+                    // Show full version with build number
+                    VersionTextBlock.Text = $"Version {version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
                     
-                    if (!string.IsNullOrEmpty(fileVersion.FileVersion) && fileVersion.FileVersion != version.ToString())
+                    // Add additional info if available
+                    if (!string.IsNullOrEmpty(fileVersion.FileVersion))
                     {
-                        VersionTextBlock.Text += $" (Build {fileVersion.FileVersion})";
+                        var buildDate = DateTime.MinValue.AddDays(version.Build);
+                        VersionTextBlock.Text += $" (Build #{version.Revision})";
                     }
                 }
                 else
@@ -57,7 +58,7 @@ namespace TID3
 
         private void LoadSettings()
         {
-            _currentSettings = _settingsManager.LoadSettings();
+            _currentSettings = SettingsManager.LoadSettings();
 
             // API Configuration
             MusicBrainzUserAgentTextBox.Text = _currentSettings.MusicBrainzUserAgent;
@@ -135,9 +136,8 @@ namespace TID3
                     return;
                 }
 
-                using (var client = new HttpClient())
+                using (var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0"))
                 {
-                    client.DefaultRequestHeaders.Add("User-Agent", "TID3/1.0");
                     var url = $"https://api.discogs.com/database/search?q=test&key={apiKey}&secret={secret}";
 
                     var response = await client.GetAsync(url);
@@ -227,7 +227,7 @@ namespace TID3
             try
             {
                 SaveSettings();
-                _settingsManager.SaveSettings(_currentSettings);
+                SettingsManager.SaveSettings(_currentSettings);
 
                 MessageBox.Show("Settings saved successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 DialogResult = true;
@@ -317,6 +317,68 @@ namespace TID3
             };
             var parent = ((Control)sender).Parent as UIElement;
             parent?.RaiseEvent(eventArg);
+        }
+
+        private async void CheckForUpdatesNow_Click(object sender, RoutedEventArgs e)
+        {
+            var button = (Button)sender;
+            var originalContent = button.Content;
+            
+            try
+            {
+                button.Content = "Checking...";
+                button.IsEnabled = false;
+
+                // Get the main window and call its update check method
+                if (Application.Current.MainWindow is MainWindow mainWindow)
+                {
+                    var updateInfo = await mainWindow.CheckForUpdatesManually();
+                    
+                    if (updateInfo != null)
+                    {
+                        var message = $"A new version is available!\n\n" +
+                                     $"Current Version: {_currentSettings.Version}\n" +
+                                     $"Latest Version: {updateInfo.Version}\n" +
+                                     $"Released: {updateInfo.PublishedAt:yyyy-MM-dd}\n\n" +
+                                     $"Would you like to download the update?";
+
+                        var result = MessageBox.Show(message, "Update Available", 
+                            MessageBoxButton.YesNo, MessageBoxImage.Information);
+
+                        if (result == MessageBoxResult.Yes)
+                        {
+                            try
+                            {
+                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = updateInfo.DownloadUrl,
+                                    UseShellExecute = true
+                                });
+                            }
+                            catch
+                            {
+                                MessageBox.Show("Could not open the download page. Please visit the GitHub releases page manually.",
+                                    "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show("You are already running the latest version!", 
+                            "Up to Date", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                }
+            }
+            catch
+            {
+                MessageBox.Show("Failed to check for updates. Please check your internet connection.",
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                button.Content = originalContent;
+                button.IsEnabled = true;
+            }
         }
     }
 }

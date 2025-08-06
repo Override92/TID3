@@ -50,10 +50,7 @@
 
 ### Prerequisites
 - Windows 10/11
-- .NET 9.0 Runtime
-
-### Installation
-1. see "Building from source"
+- .NET 8.0 Runtime
 
 ### First Steps
 1. **Load Files**: Use "Load Files" or "Load Folder" to import your audio collection
@@ -95,7 +92,7 @@ dotnet build
 
 ### Requirements
 - Visual Studio 2022 or VS Code
-- .NET 9.0 SDK
+- .NET 8.0 SDK
 - Windows 10/11 for WPF development
 
 ### Architecture Overview

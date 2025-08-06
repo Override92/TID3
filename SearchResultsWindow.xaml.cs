@@ -35,7 +35,7 @@ namespace TID3
                 // Highlight selected item
                 foreach (Border item in FindVisualChildren<Border>(ResultsList))
                 {
-                    if (item.Tag == release)
+                    if (item.Tag is MusicBrainzRelease itemRelease && itemRelease.Id == release.Id)
                         item.Background = new SolidColorBrush(Color.FromRgb(0, 120, 212));
                     else
                         item.Background = new SolidColorBrush(Color.FromRgb(45, 45, 48));
