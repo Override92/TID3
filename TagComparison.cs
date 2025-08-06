@@ -389,7 +389,6 @@ namespace TID3
         {
             var pending = TagComparison.Count(c => c.CanAccept);
             var accepted = TagComparison.Count(c => c.IsAccepted);
-            var rejected = TagComparison.Count(c => c.IsRejected);
 
             if (pending > 0)
             {
