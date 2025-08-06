@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -156,18 +157,27 @@ namespace TID3
             {
                 await Task.Run(() =>
                 {
+                    var loadedFiles = new List<AudioFileInfo>();
                     foreach (var fileName in filePaths)
                     {
-                        Application.Current.Dispatcher.Invoke(() =>
+                        var audioFile = _tagService.LoadFile(fileName);
+                        if (audioFile != null)
                         {
-                            var audioFile = _tagService.LoadFile(fileName);
-                            if (audioFile != null)
-                            {
-                                audioFile.CreateSnapshot(); // Create initial snapshot for comparison
-                                _audioFiles.Add(audioFile);
-                            }
-                        });
+                            audioFile.CreateSnapshot(); // Create initial snapshot for comparison
+                            loadedFiles.Add(audioFile);
+                        }
                     }
+
+                    // Sort by album, then by track number
+                    var sortedFiles = loadedFiles.OrderBy(f => f.Album ?? "").ThenBy(f => f.Track).ToList();
+
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        foreach (var file in sortedFiles)
+                        {
+                            _audioFiles.Add(file);
+                        }
+                    });
                 });
 
                 UpdateStatus($"Successfully loaded {_audioFiles.Count} audio files.");
@@ -436,10 +446,16 @@ namespace TID3
                 return;
             }
 
-            var result = MessageBox.Show($"Are you sure you want to clear all {_audioFiles.Count} files from the list?\n\nUnsaved changes will be lost.",
-                                       "Confirm Clear",
-                                       MessageBoxButton.YesNo,
-                                       MessageBoxImage.Question);
+            bool hasUnsavedChanges = HasUnsavedChanges();
+            MessageBoxResult result = MessageBoxResult.Yes;
+
+            if (hasUnsavedChanges)
+            {
+                result = MessageBox.Show($"Are you sure you want to clear all {_audioFiles.Count} files from the list?\n\nUnsaved changes will be lost.",
+                                           "Confirm Clear",
+                                           MessageBoxButton.YesNo,
+                                           MessageBoxImage.Question);
+            }
 
             if (result == MessageBoxResult.Yes)
             {

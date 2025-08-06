@@ -198,10 +198,13 @@ namespace TID3
                 {
                     foreach (var result in resultsElement.EnumerateArray())
                     {
+                        var titleString = result.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "";
+                        var albumTitle = ExtractAlbumFromDiscogsTitle(titleString);
+                        
                         releases.Add(new DiscogsRelease
                         {
                             Id = result.TryGetProperty("id", out var id) ? id.GetInt32() : 0,
-                            Title = result.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
+                            Title = albumTitle,
                             Artist = GetDiscogsArtistString(result),
                             Year = GetDiscogsYearString(result),
                             Genre = GetDiscogsGenreString(result),
@@ -307,6 +310,26 @@ namespace TID3
                 return string.Join(", ", genres);
             }
             return "";
+        }
+
+        private static string ExtractAlbumFromDiscogsTitle(string titleString)
+        {
+            if (string.IsNullOrEmpty(titleString))
+                return "";
+
+            // Discogs title format is typically "Artist - Album"
+            // We want to extract just the album part
+            if (titleString.Contains(" - "))
+            {
+                var parts = titleString.Split(new[] { " - " }, 2, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 2)
+                {
+                    return parts[1].Trim();
+                }
+            }
+
+            // If no " - " separator found, return the full title as album
+            return titleString.Trim();
         }
 
         private static string GetDiscogsYearString(JsonElement element)

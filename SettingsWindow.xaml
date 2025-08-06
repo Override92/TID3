@@ -117,6 +117,7 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="8,6"/>
             <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="Normal"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBox">
@@ -129,9 +130,9 @@
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
                                         <Border x:Name="Border" 
-                                                Background="{TemplateBinding Background}"
-                                                BorderBrush="{TemplateBinding BorderBrush}"
-                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                Background="{StaticResource SecondaryBrush}"
+                                                BorderBrush="{StaticResource BorderBrush}"
+                                                BorderThickness="1"
                                                 CornerRadius="3">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
@@ -164,7 +165,8 @@
                                             ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
                                             Margin="8,6,25,6"
                                             VerticalAlignment="Center"
-                                            HorizontalAlignment="Left" />
+                                            HorizontalAlignment="Left"
+                                            TextElement.Foreground="{StaticResource TextBrush}" />
                             <TextBox x:Name="PART_EditableTextBox"
                                    Style="{x:Null}" 
                                    HorizontalAlignment="Left" 
@@ -233,7 +235,9 @@
         <Style x:Key="ModernComboBoxItem" TargetType="ComboBoxItem">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="Normal"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBoxItem">
@@ -241,14 +245,80 @@
                                 Background="{TemplateBinding Background}"
                                 Padding="{TemplateBinding Padding}"
                                 CornerRadius="2">
-                            <ContentPresenter />
+                            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="true">
                                 <Setter TargetName="Border" Property="Background" Value="{StaticResource PrimaryBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="true">
                                 <Setter TargetName="Border" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Slider Button Style -->
+        <Style x:Key="SliderButtonStyle" TargetType="RepeatButton">
+            <Setter Property="SnapsToDevicePixels" Value="true"/>
+            <Setter Property="OverridesDefaultStyle" Value="true"/>
+            <Setter Property="IsTabStop" Value="false"/>
+            <Setter Property="Focusable" Value="false"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Border Height="6"
+                                Background="Transparent"
+                                CornerRadius="3"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Slider Thumb Style -->
+        <Style x:Key="SliderThumbStyle" TargetType="Thumb">
+            <Setter Property="SnapsToDevicePixels" Value="true"/>
+            <Setter Property="OverridesDefaultStyle" Value="true"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Ellipse x:Name="Ellipse"
+                                 Fill="{StaticResource PrimaryBrush}"
+                                 Stroke="{StaticResource TextBrush}"
+                                 StrokeThickness="1"
+                                 Height="20"
+                                 Width="20">
+                            <Ellipse.Effect>
+                                <DropShadowEffect Color="Black" 
+                                                Direction="270" 
+                                                ShadowDepth="2" 
+                                                Opacity="0.3" 
+                                                BlurRadius="4"/>
+                            </Ellipse.Effect>
+                        </Ellipse>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Ellipse" Property="Fill" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="Ellipse" Property="StrokeThickness" Value="2"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="Ellipse" Property="Fill" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="Ellipse" Property="StrokeThickness" Value="2"/>
+                                <Setter TargetName="Ellipse" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect Color="Black" 
+                                                        Direction="270" 
+                                                        ShadowDepth="3" 
+                                                        Opacity="0.5" 
+                                                        BlurRadius="6"/>
+                                    </Setter.Value>
+                                </Setter>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -257,8 +327,46 @@
         </Style>
 
         <Style x:Key="ModernSlider" TargetType="Slider">
-            <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
             <Setter Property="Background" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto" MinHeight="{TemplateBinding MinHeight}"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            
+                            <!-- Track -->
+                            <Border x:Name="TrackBackground"
+                                    Grid.Row="1"
+                                    Height="6"
+                                    Background="{StaticResource BorderBrush}"
+                                    BorderBrush="{StaticResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="3"
+                                    VerticalAlignment="center"
+                                    Margin="5,0"/>
+
+                            <!-- Track with gradient effect -->
+                            <Track x:Name="PART_Track" Grid.Row="1">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource SliderButtonStyle}" Command="Slider.DecreaseLarge"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource SliderThumbStyle}" />
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource SliderButtonStyle}" Command="Slider.IncreaseLarge"/>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style x:Key="ModernLabel" TargetType="Label">
@@ -355,6 +463,7 @@
                                 Get your Discogs API credentials here
                             </Hyperlink>
                         </TextBlock>
+
                     </StackPanel>
                 </Border>
 
@@ -477,6 +586,7 @@
                                       VerticalAlignment="Center"
                                       Margin="12,0,0,0"/>
                         </Grid>
+
                     </StackPanel>
                 </Border>
 
