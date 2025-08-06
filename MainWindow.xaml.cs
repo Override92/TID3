@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -297,13 +298,16 @@ namespace TID3
                 }
 
                 // For now, show results in a simple message box
-                var message = $"Found {releases.Count} results:\n\n";
+                var messageBuilder = new StringBuilder();
+                messageBuilder.AppendLine($"Found {releases.Count} results:");
+                messageBuilder.AppendLine();
                 foreach (var release in releases.Take(5))
                 {
-                    message += $"� {release.Artist} - {release.Title} ({release.Date}) [Score: {release.Score}]\n";
+                    messageBuilder.AppendLine($"� {release.Artist} - {release.Title} ({release.Date}) [Score: {release.Score}]");
                 }
                 if (releases.Count > 5)
-                    message += $"\n... and {releases.Count - 5} more results";
+                    messageBuilder.AppendLine($"\n... and {releases.Count - 5} more results");
+                var message = messageBuilder.ToString();
 
                 // Create comparison with the first result for demonstration
                 if (releases.Any())
@@ -355,11 +359,14 @@ namespace TID3
                     return;
                 }
 
-                var message = $"Found {releases.Count} Discogs results!\n\n";
+                var messageBuilder = new StringBuilder();
+                messageBuilder.AppendLine($"Found {releases.Count} Discogs results!");
+                messageBuilder.AppendLine();
                 foreach (var release in releases.Take(3))
                 {
-                    message += $"� {release.Artist} - {release.Title} ({release.Year})\n";
+                    messageBuilder.AppendLine($"� {release.Artist} - {release.Title} ({release.Year})");
                 }
+                var message = messageBuilder.ToString();
 
                 // Create comparison with the first result for demonstration
                 if (releases.Any())
