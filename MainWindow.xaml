@@ -635,25 +635,33 @@
                       ColumnHeaderStyle="{StaticResource ModernColumnHeaderStyle}"
                       RowStyle="{StaticResource ModernDataGridRowStyle}"
                       CellStyle="{StaticResource ModernDataGridCellStyle}"
-                      AutoGenerateColumns="False">
+                      AutoGenerateColumns="False"
+                      VirtualizingPanel.IsVirtualizing="True"
+                      VirtualizingPanel.VirtualizationMode="Recycling"
+                      VirtualizingPanel.IsContainerVirtualizable="True"
+                      VirtualizingPanel.ScrollUnit="Pixel"
+                      ScrollViewer.CanContentScroll="True"
+                      ScrollViewer.IsDeferredScrollingEnabled="True"
+                      EnableRowVirtualization="True"
+                      EnableColumnVirtualization="True">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="File Name" Binding="{Binding FileName}" Width="200"/>
-                    <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="150"/>
-                    <DataGridTextColumn Header="Artist" Binding="{Binding Artist}" Width="120"/>
-                    <DataGridTextColumn Header="Album" Binding="{Binding Album}" Width="120"/>
-                    <DataGridTextColumn Header="Year" Binding="{Binding Year}" Width="60"/>
-                    <DataGridTextColumn Header="Track" Binding="{Binding Track}" Width="50"/>
-                    <DataGridTextColumn Header="Duration" Binding="{Binding Duration}" Width="70"/>
-                    <DataGridTextColumn Header="Bitrate" Binding="{Binding Bitrate}" Width="80"/>
+                    <DataGridTextColumn Header="File Name" Binding="{Binding FileName}" Width="3*" MinWidth="150"/>
+                    <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="2.5*" MinWidth="120"/>
+                    <DataGridTextColumn Header="Artist" Binding="{Binding Artist}" Width="2*" MinWidth="100"/>
+                    <DataGridTextColumn Header="Album" Binding="{Binding Album}" Width="2*" MinWidth="100"/>
+                    <DataGridTextColumn Header="Year" Binding="{Binding Year}" Width="0.8*" MinWidth="60"/>
+                    <DataGridTextColumn Header="Track" Binding="{Binding Track}" Width="0.6*" MinWidth="50"/>
+                    <DataGridTextColumn Header="Duration" Binding="{Binding Duration}" Width="1*" MinWidth="70"/>
+                    <DataGridTextColumn Header="Bitrate" Binding="{Binding Bitrate}" Width="1*" MinWidth="80"/>
                 </DataGrid.Columns>
             </DataGrid>
 
             <GridSplitter Grid.Column="1" Background="{StaticResource BorderBrush}" 
-                         HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                         HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Padding="2,2,2,2" Margin="2,0,0,0" Width="2"/>
 
             <!-- Tag Editor Panel -->
             <ScrollViewer Grid.Column="2" Style="{StaticResource Windows11ScrollViewer}">
-                <StackPanel Margin="12,0,0,0" DataContext="{Binding SelectedFile}">
+                <StackPanel Margin="7,0,0,0" DataContext="{Binding SelectedFile}">
                     <TextBlock Text="Tag Editor" Style="{StaticResource HeaderText}" FontSize="16"/>
 
                     <Label Content="Title:" Style="{StaticResource ModernLabel}"/>
@@ -717,17 +725,18 @@
         </Grid>
 
         <!-- GridSplitter above Status/Info Panel -->
-        <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch" 
+        <GridSplitter Grid.Row="3" Height="2" HorizontalAlignment="Stretch" 
                      Background="{StaticResource BorderBrush}" 
                      VerticalAlignment="Center" 
-                     ResizeDirection="Rows"/>
+                     ResizeDirection="Rows"
+                     Padding="2,2,2,2" Margin="1,4,1,1"/>
 
         <!-- Status/Info Panel -->
         <Border Grid.Row="4" Background="{StaticResource SecondaryBrush}" 
                 BorderBrush="{StaticResource BorderBrush}" 
                 BorderThickness="1" 
                 CornerRadius="4" 
-                Margin="0,12,0,0">
+                Margin="0,4,0,0">
             <Grid Margin="12">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>

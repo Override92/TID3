@@ -93,8 +93,36 @@ namespace TID3
         [JsonPropertyName("window_maximized")]
         public bool WindowMaximized { get; set; } = false;
 
+        [JsonPropertyName("window_minimized")]
+        public bool WindowMinimized { get; set; } = false;
+
+        [JsonPropertyName("window_x")]
+        public double WindowX { get; set; } = double.NaN;
+
+        [JsonPropertyName("window_y")]
+        public double WindowY { get; set; } = double.NaN;
+
+        [JsonPropertyName("window_state")]
+        public int WindowState { get; set; } = 0; // 0=Normal, 1=Minimized, 2=Maximized
+
+        [JsonPropertyName("remember_window_state")]
+        public bool RememberWindowState { get; set; } = true;
+
+        [JsonPropertyName("center_on_startup")]
+        public bool CenterOnStartup { get; set; } = false;
+
         [JsonPropertyName("last_directory")]
         public string LastDirectory { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
+
+        // DataGrid Column Settings
+        [JsonPropertyName("column_widths")]
+        public double[] ColumnWidths { get; set; } = { 3.0, 2.5, 2.0, 2.0, 0.8, 0.6, 1.0, 1.0 };
+
+        [JsonPropertyName("remember_column_widths")]
+        public bool RememberColumnWidths { get; set; } = true;
+
+        [JsonPropertyName("auto_fit_columns")]
+        public bool AutoFitColumns { get; set; } = false;
 
         // Application Settings
         [JsonPropertyName("version")]
@@ -255,6 +283,27 @@ namespace TID3
             if (settings.WindowWidth < 800) settings.WindowWidth = 1200;
             if (settings.WindowHeight < 600) settings.WindowHeight = 800;
 
+            // Validate window state
+            if (settings.WindowState < 0 || settings.WindowState > 2) settings.WindowState = 0;
+
+            // Validate window position (ensure window is visible on screen)
+            ValidateWindowPosition(settings);
+
+            // Validate column width settings
+            if (settings.ColumnWidths == null || settings.ColumnWidths.Length != 8)
+            {
+                settings.ColumnWidths = new double[] { 3.0, 2.5, 2.0, 2.0, 0.8, 0.6, 1.0, 1.0 };
+            }
+            else
+            {
+                // Ensure all column widths are positive
+                for (int i = 0; i < settings.ColumnWidths.Length; i++)
+                {
+                    if (settings.ColumnWidths[i] <= 0)
+                        settings.ColumnWidths[i] = 1.0;
+                }
+            }
+
             // Validate API settings
             if (string.IsNullOrWhiteSpace(settings.MusicBrainzUserAgent))
             {
@@ -265,49 +314,66 @@ namespace TID3
             settings.Version = "1.0.0";
         }
 
-        public void ResetToDefaults()
-        {
-            try
-            {
-                if (File.Exists(SettingsFilePath))
-                {
-                    File.Delete(SettingsFilePath);
-                }
 
-                var defaultSettings = new AppSettings();
-                SaveSettings(defaultSettings);
-            }
-            catch (Exception ex)
-            {
-                System.Windows.MessageBox.Show(
-                    $"Error resetting settings: {ex.Message}",
-                    "Settings Reset Error",
-                    System.Windows.MessageBoxButton.OK,
-                    System.Windows.MessageBoxImage.Error);
-            }
-        }
-
-        public void BackupSettings()
-        {
-            try
-            {
-                if (!File.Exists(SettingsFilePath)) return;
-
-                var backupPath = Path.Combine(SettingsDirectory, $"settings_backup_{DateTime.Now:yyyyMMdd_HHmmss}.json");
-                File.Copy(SettingsFilePath, backupPath);
-            }
-            catch (Exception ex)
-            {
-                System.Windows.MessageBox.Show(
-                    $"Error creating settings backup: {ex.Message}",
-                    "Backup Error",
-                    System.Windows.MessageBoxButton.OK,
-                    System.Windows.MessageBoxImage.Warning);
-            }
-        }
 
         public static string GetSettingsDirectory() => SettingsDirectory;
         public static string GetSettingsFilePath() => SettingsFilePath;
+
+        private static void ValidateWindowPosition(AppSettings settings)
+        {
+            try
+            {
+                // If window position is not set, center it or use defaults
+                if (double.IsNaN(settings.WindowX) || double.IsNaN(settings.WindowY))
+                {
+                    if (settings.CenterOnStartup)
+                    {
+                        // Center on primary screen
+                        var screenWidth = System.Windows.SystemParameters.PrimaryScreenWidth;
+                        var screenHeight = System.Windows.SystemParameters.PrimaryScreenHeight;
+                        settings.WindowX = (screenWidth - settings.WindowWidth) / 2;
+                        settings.WindowY = (screenHeight - settings.WindowHeight) / 2;
+                    }
+                    else
+                    {
+                        // Use default position
+                        settings.WindowX = double.NaN;
+                        settings.WindowY = double.NaN;
+                    }
+                    return;
+                }
+
+                // Ensure window is visible on at least one screen
+                var workingArea = System.Windows.SystemParameters.WorkArea;
+                
+                // Check if window is completely off-screen
+                bool isVisible = settings.WindowX < workingArea.Right - 100 && // At least 100px visible on right
+                                settings.WindowX + settings.WindowWidth > workingArea.Left + 100 && // At least 100px visible on left
+                                settings.WindowY < workingArea.Bottom - 50 && // At least 50px visible on bottom
+                                settings.WindowY + settings.WindowHeight > workingArea.Top + 50; // At least 50px visible on top
+
+                if (!isVisible)
+                {
+                    // Reset to center of working area
+                    settings.WindowX = workingArea.Left + (workingArea.Width - settings.WindowWidth) / 2;
+                    settings.WindowY = workingArea.Top + (workingArea.Height - settings.WindowHeight) / 2;
+                }
+
+                // Ensure window fits within bounds
+                if (settings.WindowX < workingArea.Left) settings.WindowX = workingArea.Left;
+                if (settings.WindowY < workingArea.Top) settings.WindowY = workingArea.Top;
+                if (settings.WindowX + settings.WindowWidth > workingArea.Right)
+                    settings.WindowX = workingArea.Right - settings.WindowWidth;
+                if (settings.WindowY + settings.WindowHeight > workingArea.Bottom)
+                    settings.WindowY = workingArea.Bottom - settings.WindowHeight;
+            }
+            catch
+            {
+                // If validation fails, reset to defaults
+                settings.WindowX = double.NaN;
+                settings.WindowY = double.NaN;
+            }
+        }
     }
 
     // Extension methods for easier settings access
