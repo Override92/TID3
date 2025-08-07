@@ -7,10 +7,17 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using TagLib;
 
 namespace TID3
 {
+    // Compiled regex for track count patterns - optimized for performance
+    internal static class RegexPatterns
+    {
+        // Using Compiled option for better performance than runtime compilation
+        internal static readonly Regex TrackCountPattern = new(@"(\d+)\s*tracks?", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    }
     public class MusicBrainzService
     {
         private HttpClient _client;
@@ -54,7 +61,7 @@ namespace TID3
             catch (Exception ex)
             {
                 MessageBox.Show($"MusicBrainz search error: {ex.Message}");
-                return new List<MusicBrainzRelease>();
+                return [];
             }
         }
 
@@ -185,7 +192,7 @@ namespace TID3
                 if (!_settings.HasValidDiscogsCredentials())
                 {
                     MessageBox.Show("Discogs API credentials are not configured. Please check Settings.", "API Configuration", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return new List<DiscogsRelease>();
+                    return [];
                 }
 
                 var url = $"{BASE_URL}database/search?q={Uri.EscapeDataString(query)}&type=release&key={_settings.DiscogsApiKey}&secret={_settings.DiscogsSecret}";
@@ -217,7 +224,7 @@ namespace TID3
             catch (Exception ex)
             {
                 MessageBox.Show($"Discogs search error: {ex.Message}");
-                return new List<DiscogsRelease>();
+                return [];
             }
         }
 
@@ -282,7 +289,7 @@ namespace TID3
                 var title = titleElement.GetString();
                 if (!string.IsNullOrEmpty(title) && title.Contains(" - "))
                 {
-                    var parts = title.Split(new[] { " - " }, 2, StringSplitOptions.RemoveEmptyEntries);
+                    var parts = title.Split([" - "], 2, StringSplitOptions.RemoveEmptyEntries);
                     if (parts.Length >= 2 && !string.IsNullOrEmpty(parts[0]))
                     {
                         return parts[0].Trim();
@@ -321,7 +328,7 @@ namespace TID3
             // We want to extract just the album part
             if (titleString.Contains(" - "))
             {
-                var parts = titleString.Split(new[] { " - " }, 2, StringSplitOptions.RemoveEmptyEntries);
+                var parts = titleString.Split([" - "], 2, StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length >= 2)
                 {
                     return parts[1].Trim();
@@ -366,7 +373,7 @@ namespace TID3
                             foreach (var desc in descriptionsElement.EnumerateArray())
                             {
                                 var descStr = desc.GetString() ?? "";
-                                var trackMatch = System.Text.RegularExpressions.Regex.Match(descStr, @"(\d+)\s*tracks?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                var trackMatch = RegexPatterns.TrackCountPattern.Match(descStr);
                                 if (trackMatch.Success && int.TryParse(trackMatch.Groups[1].Value, out int trackCount))
                                 {
                                     return trackCount;
@@ -392,7 +399,7 @@ namespace TID3
                     {
                         var formatStr = format.GetString() ?? "";
                         // Look for track count patterns like "CD, Album, 12 tracks"
-                        var trackMatch = System.Text.RegularExpressions.Regex.Match(formatStr, @"(\d+)\s*tracks?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        var trackMatch = RegexPatterns.TrackCountPattern.Match(formatStr);
                         if (trackMatch.Success && int.TryParse(trackMatch.Groups[1].Value, out int trackCount))
                         {
                             return trackCount;
@@ -405,7 +412,7 @@ namespace TID3
             if (element.TryGetProperty("title", out var titleElement))
             {
                 var title = titleElement.GetString() ?? "";
-                var trackMatch = System.Text.RegularExpressions.Regex.Match(title, @"(\d+)\s*tracks?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                var trackMatch = RegexPatterns.TrackCountPattern.Match(title);
                 if (trackMatch.Success && int.TryParse(trackMatch.Groups[1].Value, out int trackCount))
                 {
                     return trackCount;
@@ -422,36 +429,64 @@ namespace TID3
         {
             try
             {
-                using (var file = TagLib.File.Create(filePath))
+                using var file = TagLib.File.Create(filePath);
+                
+                // Cache tag and properties references to avoid repeated property access
+                var tag = file.Tag;
+                var properties = file.Properties;
+                
+                var audioFile = new AudioFileInfo
                 {
-                    var audioFile = new AudioFileInfo
-                    {
-                        FilePath = filePath,
-                        Title = file.Tag.Title ?? "",
-                        Artist = string.Join(", ", file.Tag.Performers ?? new string[0]),
-                        Album = file.Tag.Album ?? "",
-                        Genre = string.Join(", ", file.Tag.Genres ?? new string[0]),
-                        Year = file.Tag.Year,
-                        Track = file.Tag.Track,
-                        AlbumArtist = string.Join(", ", file.Tag.AlbumArtists ?? new string[0]),
-                        Comment = file.Tag.Comment ?? "",
-                        Duration = file.Properties.Duration.ToString(@"mm\:ss"),
-                        Bitrate = $"{file.Properties.AudioBitrate} kbps",
-                        FileSize = FormatFileSize(new FileInfo(filePath).Length)
-                    };
-                    return audioFile;
-                }
+                    FilePath = filePath,
+                    Title = tag.Title ?? string.Empty,
+                    Artist = JoinStringArray(tag.Performers),
+                    Album = tag.Album ?? string.Empty,
+                    Genre = JoinStringArray(tag.Genres),
+                    Year = tag.Year,
+                    Track = tag.Track,
+                    AlbumArtist = JoinStringArray(tag.AlbumArtists),
+                    Comment = tag.Comment ?? string.Empty,
+                    Duration = FormatDuration(properties.Duration),
+                    Bitrate = FormatBitrate(properties.AudioBitrate),
+                    FileSize = FormatFileSize(new FileInfo(filePath).Length)
+                };
+                return audioFile;
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error loading file {filePath}: {ex.Message}");
+                // Log error but don't show MessageBox in parallel context
+                System.Diagnostics.Debug.WriteLine($"Error loading file {filePath}: {ex.Message}");
                 return null;
             }
+        }
+        
+        // Optimized string joining to avoid unnecessary allocations
+        private static string JoinStringArray(string[]? array)
+        {
+            if (array == null || array.Length == 0)
+                return string.Empty;
+            
+            if (array.Length == 1)
+                return array[0] ?? string.Empty;
+            
+            return string.Join(", ", array);
+        }
+        
+        // Optimized duration formatting without string interpolation overhead
+        private static string FormatDuration(TimeSpan duration)
+        {
+            return duration.ToString(@"mm\:ss");
+        }
+        
+        // Optimized bitrate formatting to reduce allocations
+        private static string FormatBitrate(int bitrate)
+        {
+            return bitrate > 0 ? $"{bitrate} kbps" : "Unknown";
         }
 
         private static string FormatFileSize(long bytes)
         {
-            string[] suffixes = { "B", "KB", "MB", "GB" };
+            string[] suffixes = ["B", "KB", "MB", "GB"];
             int counter = 0;
             decimal number = bytes;
             while (Math.Round(number / 1024) >= 1)
@@ -466,19 +501,17 @@ namespace TID3
         {
             try
             {
-                using (var file = TagLib.File.Create(audioFile.FilePath))
-                {
-                    file.Tag.Title = audioFile.Title;
-                    file.Tag.Performers = audioFile.Artist.Split(',').Select(s => s.Trim()).ToArray();
-                    file.Tag.Album = audioFile.Album;
-                    file.Tag.Genres = audioFile.Genre.Split(',').Select(s => s.Trim()).ToArray();
-                    file.Tag.Year = audioFile.Year;
-                    file.Tag.Track = audioFile.Track;
-                    file.Tag.AlbumArtists = audioFile.AlbumArtist.Split(',').Select(s => s.Trim()).ToArray();
-                    file.Tag.Comment = audioFile.Comment;
-                    file.Save();
-                    return true;
-                }
+                using var file = TagLib.File.Create(audioFile.FilePath);
+                file.Tag.Title = audioFile.Title;
+                file.Tag.Performers = [.. audioFile.Artist.Split(',').Select(s => s.Trim())];
+                file.Tag.Album = audioFile.Album;
+                file.Tag.Genres = [.. audioFile.Genre.Split(',').Select(s => s.Trim())];
+                file.Tag.Year = audioFile.Year;
+                file.Tag.Track = audioFile.Track;
+                file.Tag.AlbumArtists = [.. audioFile.AlbumArtist.Split(',').Select(s => s.Trim())];
+                file.Tag.Comment = audioFile.Comment;
+                file.Save();
+                return true;
             }
             catch (Exception ex)
             {

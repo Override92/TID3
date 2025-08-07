@@ -33,6 +33,9 @@ namespace TID3
         [JsonPropertyName("discogs_secret")]
         public string DiscogsSecret { get; set; } = "";
 
+        [JsonPropertyName("acoustid_api_key")]
+        public string AcoustIdApiKey { get; set; } = "";
+
         // File Processing
         [JsonPropertyName("auto_save")]
         public bool AutoSave { get; set; } = false;
@@ -367,9 +370,15 @@ namespace TID3
                 if (settings.WindowY + settings.WindowHeight > workingArea.Bottom)
                     settings.WindowY = workingArea.Bottom - settings.WindowHeight;
             }
-            catch
+            catch (InvalidOperationException)
             {
-                // If validation fails, reset to defaults
+                // If screen bounds validation fails, reset to defaults
+                settings.WindowX = double.NaN;
+                settings.WindowY = double.NaN;
+            }
+            catch (ArithmeticException)
+            {
+                // If arithmetic operations fail (overflow/underflow), reset to defaults
                 settings.WindowX = double.NaN;
                 settings.WindowY = double.NaN;
             }
@@ -397,6 +406,11 @@ namespace TID3
         public static bool HasValidDiscogsCredentials(this AppSettings settings)
         {
             return !string.IsNullOrWhiteSpace(settings.DiscogsApiKey);
+        }
+
+        public static bool HasValidAcoustIdCredentials(this AppSettings settings)
+        {
+            return !string.IsNullOrWhiteSpace(settings.AcoustIdApiKey);
         }
     }
 }

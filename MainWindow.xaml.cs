@@ -1,13 +1,18 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using System.Windows.Media;
 using System.Windows.Controls;
@@ -20,6 +25,47 @@ namespace TID3
     /// </summary>
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
+        #region Win32 API for Dark Mode Title Bar
+        
+        [DllImport("dwmapi.dll", SetLastError = true)]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+        
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+        
+        private static void SetDarkTitleBar(IntPtr handle)
+        {
+            var darkMode = 1; // 1 = dark, 0 = light
+            
+            // Try Windows 11/newer Windows 10 attribute first
+            int result = DwmSetWindowAttribute(handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
+            
+            // If that fails, try the older attribute for Windows 10 versions before 20H1
+            if (result != 0)
+            {
+                DwmSetWindowAttribute(handle, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref darkMode, sizeof(int));
+            }
+        }
+        
+        #endregion
+        
+        private void MainWindow_SourceInitialized(object? sender, EventArgs e)
+        {
+            // Apply dark title bar theme
+            try
+            {
+                if (PresentationSource.FromVisual(this) is HwndSource hwndSource)
+                {
+                    SetDarkTitleBar(hwndSource.Handle);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Silent fail - dark title bar is not critical
+                System.Diagnostics.Debug.WriteLine($"Failed to apply dark title bar: {ex.Message}");
+            }
+        }
+        
         private readonly TagService _tagService;
         private readonly MusicBrainzService _musicBrainzService;
         private readonly DiscogsService _discogsService;
@@ -68,6 +114,9 @@ namespace TID3
         {
             InitializeComponent();
             DataContext = this;
+            
+            // Apply dark title bar when window handle is available
+            SourceInitialized += MainWindow_SourceInitialized;
 
             _tagService = new TagService();
             _musicBrainzService = new MusicBrainzService();
@@ -281,19 +330,32 @@ namespace TID3
             }
         }
 
-        private void LoadFolder_Click(object sender, RoutedEventArgs e)
+        private async void LoadFolder_Click(object sender, RoutedEventArgs e)
         {
-            using (var folderDialog = new System.Windows.Forms.FolderBrowserDialog())
-            {
-                folderDialog.Description = "Select folder containing audio files";
-                folderDialog.ShowNewFolderButton = false;
+            using var folderDialog = new System.Windows.Forms.FolderBrowserDialog();
+            folderDialog.Description = "Select folder containing audio files";
+            folderDialog.ShowNewFolderButton = false;
 
-                if (folderDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            if (folderDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                var selectedPath = folderDialog.SelectedPath;
+                
+                // Show scanning feedback
+                Title = "TID3 - Scanning folder for audio files...";
+                
+                try
                 {
-                    var supportedExtensions = new[] { ".mp3", ".flac", ".m4a", ".aac", ".wav", ".wma" };
-                    var files = Directory.GetFiles(folderDialog.SelectedPath, "*.*", SearchOption.AllDirectories)
-                        .Where(file => supportedExtensions.Contains(Path.GetExtension(file).ToLower()))
-                        .ToArray();
+                    // Scan folder asynchronously to avoid blocking UI
+                    var files = await Task.Run(() =>
+                    {
+                        var supportedExtensions = new[] { ".mp3", ".flac", ".m4a", ".aac", ".wav", ".wma" };
+                        return Directory.GetFiles(selectedPath, "*.*", SearchOption.AllDirectories)
+                            .Where(file => supportedExtensions.Contains(Path.GetExtension(file).ToLower()))
+                            .ToArray();
+                    });
+
+                    // Reset title
+                    Title = "TID3 - Advanced ID3 Tag Editor";
 
                     if (files.Length == 0)
                     {
@@ -306,6 +368,12 @@ namespace TID3
 
                     LoadFilesAsync(files);
                 }
+                catch (Exception ex)
+                {
+                    // Reset title on error
+                    Title = "TID3 - Advanced ID3 Tag Editor";
+                    MessageBox.Show($"Error scanning folder: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
         }
 
@@ -313,37 +381,112 @@ namespace TID3
         {
             try
             {
-                await Task.Run(() =>
+                var totalFiles = filePaths.Length;
+                var processedCount = 0;
+                var successfulCount = 0;
+                
+                // Get max concurrent operations from settings
+                var settings = SettingsManager.LoadSettings();
+                var maxDegreeOfParallelism = Math.Max(1, Math.Min(settings.MaxConcurrentOperations, Environment.ProcessorCount));
+                
+                // Show the parallelism setting to user  
+                var parallelismNote = maxDegreeOfParallelism > 1 
+                    ? $"using {maxDegreeOfParallelism} parallel threads" 
+                    : "using single thread";
+                UpdateStatus($"Loading {totalFiles} files {parallelismNote}...");
+                
+
+                // Create progress reporter with throttling for better performance
+                var lastProgressUpdate = DateTime.MinValue;
+                var progress = new Progress<(int current, int total, string fileName)>(report =>
                 {
-                    var loadedFiles = new List<AudioFileInfo>();
-                    foreach (var fileName in filePaths)
+                    var now = DateTime.Now;
+                    // Only update UI every 50ms to reduce overhead
+                    if ((now - lastProgressUpdate).TotalMilliseconds > 50)
                     {
-                        var audioFile = _tagService.LoadFile(fileName);
-                        if (audioFile != null)
-                        {
-                            audioFile.CreateSnapshot(); // Create initial snapshot for comparison
-                            loadedFiles.Add(audioFile);
-                        }
+                        var percentage = (int)((double)report.current / report.total * 100);
+                        Title = $"TID3 - Loading Files: {percentage}% ({report.current}/{report.total}) - {report.fileName}";
+                        lastProgressUpdate = now;
                     }
-
-                    // Sort by album, then by track number
-                    var sortedFiles = loadedFiles.OrderBy(f => f.Album ?? "").ThenBy(f => f.Track).ToList();
-
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        foreach (var file in sortedFiles)
-                        {
-                            _audioFiles.Add(file);
-                        }
-                        
-                        // Note: Removed auto-fit on load - users can manually trigger via context menu
-                    });
                 });
 
-                UpdateStatus($"Successfully loaded {_audioFiles.Count} audio files.");
+                // Update title to show we're starting
+                Title = "TID3 - Loading Files: 0% (0/" + totalFiles + ") - Preparing...";
+
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                var loadedFiles = await Task.Run(() =>
+                {
+                    var files = new ConcurrentBag<AudioFileInfo>();
+                    var reportInterval = Math.Max(1, totalFiles / 20); // Report progress every 5% or at least every file
+                    
+                    // Use parallel processing with controlled degree of parallelism
+                    var parallelOptions = new ParallelOptions
+                    {
+                        MaxDegreeOfParallelism = maxDegreeOfParallelism
+                    };
+
+                    Parallel.ForEach(filePaths, parallelOptions, fileName =>
+                    {
+                        try
+                        {
+                            var audioFile = _tagService.LoadFile(fileName);
+                            if (audioFile != null)
+                            {
+                                audioFile.CreateSnapshot(); // Create initial snapshot for comparison
+                                files.Add(audioFile);
+                                Interlocked.Increment(ref successfulCount);
+                            }
+                            
+                            // Report progress less frequently to reduce thread contention
+                            var currentCount = Interlocked.Increment(ref processedCount);
+                            if (currentCount % reportInterval == 0 || currentCount == totalFiles)
+                            {
+                                var shortFileName = Path.GetFileName(fileName);
+                                ((IProgress<(int, int, string)>)progress).Report((currentCount, totalFiles, shortFileName));
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            // Log individual file errors but continue processing
+                            System.Diagnostics.Debug.WriteLine($"Error loading file {fileName}: {ex.Message}");
+                            Interlocked.Increment(ref processedCount); // Still count failed files for progress
+                        }
+                    });
+
+                    // Sort by album, then by track number
+                    return files.OrderBy(f => f.Album ?? "").ThenBy(f => f.Track).ToList();
+                });
+                
+                stopwatch.Stop();
+
+                // Update UI with final progress
+                Title = "TID3 - Loading Files: 100% - Adding to list...";
+
+                // Add files to UI collection in batches to improve performance
+                const int batchSize = 50;
+                for (int i = 0; i < loadedFiles.Count; i += batchSize)
+                {
+                    var batch = loadedFiles.Skip(i).Take(batchSize);
+                    foreach (var file in batch)
+                    {
+                        _audioFiles.Add(file);
+                    }
+                    
+                    // Allow UI to update between batches
+                    await Task.Delay(1);
+                }
+
+                // Reset title and show completion status
+                Title = "TID3 - Advanced ID3 Tag Editor";
+                var avgTimePerFile = totalFiles > 0 ? stopwatch.ElapsedMilliseconds / (double)totalFiles : 0;
+                var threadsNote = maxDegreeOfParallelism > 1 ? $"{maxDegreeOfParallelism} threads" : "1 thread";
+                var performanceNote = avgTimePerFile < 50 ? "Fast" : avgTimePerFile < 200 ? "Good" : "Slow";
+                UpdateStatus($"Loaded {successfulCount}/{totalFiles} files in {stopwatch.ElapsedMilliseconds}ms ({performanceNote}: {avgTimePerFile:F0}ms/file, {threadsNote}).");
             }
             catch (Exception ex)
             {
+                // Reset title on error
+                Title = "TID3 - Advanced ID3 Tag Editor";
                 MessageBox.Show($"Error loading files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -498,12 +641,7 @@ namespace TID3
                 _audioFiles.Clear();
                 SelectedFile = null!;
                 
-                // Force garbage collection to reclaim memory immediately
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
-                
-                UpdateStatus("File list cleared and memory cleaned up.");
+                UpdateStatus("File list cleared.");
             }
         }
 
@@ -752,6 +890,134 @@ namespace TID3
             }
         }
 
+        private async void FingerprintIdentify_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedFile == null) return;
+
+            var settings = SettingsManager.LoadSettings();
+            if (!settings.HasValidAcoustIdCredentials())
+            {
+                var result = MessageBox.Show(
+                    "AcoustID API key is not configured. Would you like to open settings to configure it?",
+                    "AcoustID Configuration Required",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    Settings_Click(sender, e);
+                }
+                return;
+            }
+
+            try
+            {
+                // Show progress indication in status bar or similar
+                var originalCursor = Cursor;
+                Cursor = System.Windows.Input.Cursors.Wait;
+
+                try
+                {
+                    var acoustIdService = new AcoustIdService(settings.AcoustIdApiKey);
+                    var results = await acoustIdService.IdentifyByFingerprintAsync(SelectedFile.FilePath);
+
+                    if (results.Any())
+                    {
+                        // Clear existing fingerprint results
+                        var existingFingerprint = _onlineSourceItems.Where(x => x.SourceType == "Fingerprint").ToList();
+                        foreach (var item in existingFingerprint)
+                        {
+                            _onlineSourceItems.Remove(item);
+                        }
+
+                        // Add new fingerprint results
+                        foreach (var result in results.Take(5))
+                        {
+                            var title = result.Title ?? "Unknown Title";
+                            var artist = result.Artist ?? "Unknown Artist";
+                            var album = result.Album ?? "Unknown Album";
+                            var score = (result.Score * 100).ToString("F1");
+                            
+                            var displayName = $"[Fingerprint {score}%] {artist} - {title}";
+                            if (!string.IsNullOrEmpty(album) && album != "Unknown Album")
+                                displayName += $" ({album})";
+                                
+                            _onlineSourceItems.Add(new OnlineSourceItem
+                            {
+                                DisplayName = displayName,
+                                Source = result,
+                                SourceType = "Fingerprint",
+                                Title = title,
+                                Artist = artist,
+                                Album = album,
+                                Score = score + "%",
+                                AdditionalInfo = $"Duration: {result.Duration}s" + 
+                                    (result.MusicBrainzId != null ? $", MB ID: {result.MusicBrainzId[..Math.Min(8, result.MusicBrainzId.Length)]}..." : ""),
+                                Data = result
+                            });
+                        }
+
+                        // Automatically apply the first (best) fingerprint result
+                        var bestResult = results.OrderByDescending(r => r.Score).First();
+                        var newTags = TagSnapshot.FromAcoustIdResult(bestResult, SelectedFile);
+                        
+                        // Apply the comparison using the existing tag comparison system
+                        SelectedFile.UpdateComparison(newTags, $"Fingerprint: {bestResult.Score * 100:F1}% match");
+                        
+                        // Select the best result in the dropdown if it exists
+                        var bestResultItem = _onlineSourceItems.FirstOrDefault(item => 
+                            item.SourceType == "Fingerprint" && 
+                            item.Data is AcoustIdResult result && 
+                            result.Score == bestResult.Score);
+                        
+                        if (bestResultItem != null)
+                        {
+                            OnlineSourceComboBox.SelectedItem = bestResultItem;
+                        }
+                        
+                        // Update apply button state
+                        UpdateApplyButtonState();
+                        
+                        // Refresh the tag comparison display
+                        UpdateComparisonDisplay();
+                        
+                        // Switch to comparison tab to show results
+                        InfoTabControl.SelectedIndex = 1; // Tag Comparison tab
+                        
+                    }
+                    else
+                    {
+                        MessageBox.Show("No matches found through audio fingerprinting.", "No Results", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                }
+                finally
+                {
+                    Cursor = originalCursor;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Show detailed error information for debugging
+                var errorDetails = $"Error Type: {ex.GetType().Name}\n" +
+                                 $"Message: {ex.Message}\n";
+                
+                if (ex.InnerException != null)
+                {
+                    errorDetails += $"\nInner Exception: {ex.InnerException.GetType().Name}\n" +
+                                  $"Inner Message: {ex.InnerException.Message}";
+                }
+                
+                if (ex is System.ComponentModel.Win32Exception win32Ex)
+                {
+                    errorDetails += $"\nWin32 Error Code: {win32Ex.ErrorCode} (0x{win32Ex.ErrorCode:X})";
+                }
+                
+                errorDetails += $"\nStack Trace: {ex.StackTrace}";
+                
+                MessageBox.Show(errorDetails, "Detailed Fingerprint Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private async void SearchDiscogs_Click(object sender, RoutedEventArgs e)
         {
             if (SelectedFile == null) return;
@@ -832,6 +1098,10 @@ namespace TID3
                 else if (selectedSource.SourceType == "Discogs" && selectedSource.Source is DiscogsRelease discogsRelease)
                 {
                     newTags = TagSnapshot.FromDiscogsRelease(discogsRelease, null, SelectedFile);
+                }
+                else if (selectedSource.SourceType == "Fingerprint" && selectedSource.Source is AcoustIdResult acoustIdResult)
+                {
+                    newTags = TagSnapshot.FromAcoustIdResult(acoustIdResult, SelectedFile);
                 }
                 else
                 {
@@ -1231,9 +1501,21 @@ namespace TID3
                     RestoreColumnWidths(settings.ColumnWidths);
                 }
             }
-            catch (Exception ex)
+            catch (InvalidOperationException ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error loading window/column settings: {ex.Message}");
+                // Fallback to default window state
+                WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            }
+            catch (ArgumentException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Invalid window/column settings: {ex.Message}");
+                // Fallback to default window state
+                WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Win32 error loading settings: {ex.Message}");
                 // Fallback to default window state
                 WindowStartupLocation = WindowStartupLocation.CenterScreen;
             }
@@ -1277,9 +1559,14 @@ namespace TID3
                     }
                 }
             }
-            catch
+            catch (InvalidOperationException)
             {
-                // Fallback: center on screen
+                // Fallback: center on screen if screen bounds operations fail
+                WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // Fallback: center on screen if Windows Forms screen access fails
                 WindowStartupLocation = WindowStartupLocation.CenterScreen;
             }
         }
@@ -1410,9 +1697,17 @@ namespace TID3
                 settings.LastUpdateCheck = DateTime.Now;
                 SettingsManager.SaveSettings(settings);
             }
-            catch
+            catch (HttpRequestException)
             {
-                // Silently fail - don't interrupt user experience
+                // Silently fail network issues - don't interrupt user experience
+            }
+            catch (TaskCanceledException)
+            {
+                // Silently fail timeout issues - don't interrupt user experience
+            }
+            catch (InvalidOperationException)
+            {
+                // Silently fail service issues - don't interrupt user experience
             }
         }
 
@@ -1436,7 +1731,15 @@ namespace TID3
                 
                 return null;
             }
-            catch
+            catch (HttpRequestException)
+            {
+                return null;
+            }
+            catch (TaskCanceledException)
+            {
+                return null;
+            }
+            catch (InvalidOperationException)
             {
                 return null;
             }
@@ -1463,7 +1766,12 @@ namespace TID3
                         UseShellExecute = true
                     });
                 }
-                catch
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    MessageBox.Show("Could not open the download page. Please visit the GitHub releases page manually.",
+                        "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                catch (InvalidOperationException)
                 {
                     MessageBox.Show("Could not open the download page. Please visit the GitHub releases page manually.",
                         "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -1499,6 +1807,7 @@ namespace TID3
             SizeChanged -= MainWindow_SizeChanged_ScrollOptimization;
             StateChanged -= MainWindow_StateChanged;
             LocationChanged -= MainWindow_LocationChanged;
+            SourceInitialized -= MainWindow_SourceInitialized;
             
             base.OnClosed(e);
         }

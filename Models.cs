@@ -119,6 +119,12 @@ namespace TID3
     {
         public string DisplayName { get; set; } = "";
         public object Source { get; set; } = null!;
-        public string SourceType { get; set; } = ""; // "MusicBrainz", "Discogs", etc.
+        public string SourceType { get; set; } = ""; // "MusicBrainz", "Discogs", "Fingerprint", etc.
+        public string Title { get; set; } = "";
+        public string Artist { get; set; } = "";
+        public string Album { get; set; } = "";
+        public string Score { get; set; } = "";
+        public string AdditionalInfo { get; set; } = "";
+        public object? Data { get; set; }
     }
 }
