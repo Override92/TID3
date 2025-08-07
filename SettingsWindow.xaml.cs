@@ -41,7 +41,6 @@ namespace TID3
                     // Add additional info if available
                     if (!string.IsNullOrEmpty(fileVersion.FileVersion))
                     {
-                        var buildDate = DateTime.MinValue.AddDays(version.Build);
                         VersionTextBlock.Text += $" (Build #{version.Revision})";
                     }
                 }
@@ -137,22 +136,20 @@ namespace TID3
                     return;
                 }
 
-                using (var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0"))
+                using var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0");
+                var url = $"https://api.discogs.com/database/search?q=test&key={apiKey}&secret={secret}";
+
+                var response = await client.GetAsync(url);
+
+                if (response.IsSuccessStatusCode)
                 {
-                    var url = $"https://api.discogs.com/database/search?q=test&key={apiKey}&secret={secret}";
-
-                    var response = await client.GetAsync(url);
-
-                    if (response.IsSuccessStatusCode)
-                    {
-                        DiscogsTestStatus.Text = "✓ Connection successful";
-                        DiscogsTestStatus.Foreground = System.Windows.Media.Brushes.LimeGreen;
-                    }
-                    else
-                    {
-                        DiscogsTestStatus.Text = $"✗ Error: {response.StatusCode}";
-                        DiscogsTestStatus.Foreground = System.Windows.Media.Brushes.Red;
-                    }
+                    DiscogsTestStatus.Text = "✓ Connection successful";
+                    DiscogsTestStatus.Foreground = System.Windows.Media.Brushes.LimeGreen;
+                }
+                else
+                {
+                    DiscogsTestStatus.Text = $"✗ Error: {response.StatusCode}";
+                    DiscogsTestStatus.Foreground = System.Windows.Media.Brushes.Red;
                 }
             }
             catch (Exception ex)
@@ -201,15 +198,13 @@ namespace TID3
 
         private void BrowseCacheDirectory_Click(object sender, RoutedEventArgs e)
         {
-            using (var folderDialog = new System.Windows.Forms.FolderBrowserDialog())
-            {
-                folderDialog.Description = "Select cache directory";
-                folderDialog.SelectedPath = CacheDirectoryTextBox.Text;
+            using var folderDialog = new System.Windows.Forms.FolderBrowserDialog();
+            folderDialog.Description = "Select cache directory";
+            folderDialog.SelectedPath = CacheDirectoryTextBox.Text;
 
-                if (folderDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-                {
-                    CacheDirectoryTextBox.Text = folderDialog.SelectedPath;
-                }
+            if (folderDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                CacheDirectoryTextBox.Text = folderDialog.SelectedPath;
             }
         }
 
