@@ -165,13 +165,13 @@ namespace TID3
 
         public ObservableCollection<TagComparisonItem> TagComparison
         {
-            get => _tagComparison ??= new ObservableCollection<TagComparisonItem>();
+            get => _tagComparison ??= [];
             set { _tagComparison = value; OnPropertyChanged(); }
         }
 
         public ObservableCollection<ChangeHistoryItem> ChangeHistory
         {
-            get => _changeHistory ??= new ObservableCollection<ChangeHistoryItem>();
+            get => _changeHistory ??= [];
             set { _changeHistory = value; OnPropertyChanged(); }
         }
 
@@ -319,7 +319,7 @@ namespace TID3
                 AcceptChange(item);
             }
 
-            if (pendingChanges.Any())
+            if (pendingChanges.Count > 0)
             {
                 AddToHistory("Bulk Accept", $"Accepted {pendingChanges.Count} changes");
             }
@@ -349,7 +349,7 @@ namespace TID3
                 item.IsRejected = false;
             }
 
-            if (acceptedChanges.Any())
+            if (acceptedChanges.Count > 0)
             {
                 AddToHistory("Bulk Revert", $"Reverted {acceptedChanges.Count} changes to original values");
             }
@@ -499,12 +499,27 @@ namespace TID3
             };
         }
 
+        public static TagSnapshot FromAcoustIdResult(AcoustIdResult result, AudioFileInfo? preserveFrom = null)
+        {
+            return new TagSnapshot
+            {
+                Title = !string.IsNullOrEmpty(result.Title) ? result.Title : (preserveFrom?.Title ?? ""),
+                Artist = !string.IsNullOrEmpty(result.Artist) ? result.Artist : (preserveFrom?.Artist ?? ""),
+                Album = !string.IsNullOrEmpty(result.Album) ? result.Album : (preserveFrom?.Album ?? ""),
+                AlbumArtist = !string.IsNullOrEmpty(result.Artist) ? result.Artist : (preserveFrom?.AlbumArtist ?? ""),
+                Genre = preserveFrom?.Genre ?? "", // AcoustID doesn't provide genre, preserve existing
+                Year = preserveFrom?.Year ?? 0, // AcoustID doesn't provide year, preserve existing
+                Track = preserveFrom?.Track ?? 0, // AcoustID doesn't provide track number, preserve existing
+                Comment = preserveFrom?.Comment ?? ""
+            };
+        }
+
         private static uint ExtractYearFromDate(string? dateString)
         {
             if (string.IsNullOrWhiteSpace(dateString) || dateString.Length < 4)
                 return 0;
 
-            var yearString = dateString.Length >= 4 ? dateString.Substring(0, 4) : dateString;
+            var yearString = dateString.Length >= 4 ? dateString[..4] : dateString;
             return uint.TryParse(yearString, out uint year) ? year : 0;
         }
     }

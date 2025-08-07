@@ -64,6 +64,7 @@ namespace TID3
             MusicBrainzUserAgentTextBox.Text = _currentSettings.MusicBrainzUserAgent;
             DiscogsApiKeyPasswordBox.Password = _currentSettings.DiscogsApiKey;
             DiscogsSecretPasswordBox.Password = _currentSettings.DiscogsSecret;
+            AcoustIdApiKeyPasswordBox.Password = _currentSettings.AcoustIdApiKey;
 
             // File Processing
             AutoSaveCheckBox.IsChecked = _currentSettings.AutoSave;
@@ -93,15 +94,15 @@ namespace TID3
             _currentSettings.MusicBrainzUserAgent = MusicBrainzUserAgentTextBox.Text.Trim();
             _currentSettings.DiscogsApiKey = DiscogsApiKeyPasswordBox.Password;
             _currentSettings.DiscogsSecret = DiscogsSecretPasswordBox.Password;
+            _currentSettings.AcoustIdApiKey = AcoustIdApiKeyPasswordBox.Password;
 
             // File Processing
             _currentSettings.AutoSave = AutoSaveCheckBox.IsChecked ?? false;
             _currentSettings.CreateBackup = CreateBackupCheckBox.IsChecked ?? false;
             _currentSettings.IncludeSubdirectories = IncludeSubdirectoriesCheckBox.IsChecked ?? true;
-            _currentSettings.SupportedExtensions = SupportedExtensionsTextBox.Text
+            _currentSettings.SupportedExtensions = [.. SupportedExtensionsTextBox.Text
                 .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                .Select(ext => ext.Trim().ToLowerInvariant())
-                .ToArray();
+                .Select(ext => ext.Trim().ToLowerInvariant())];
             _currentSettings.MaxConcurrentOperations = (int)MaxConcurrentOperationsSlider.Value;
 
             // User Interface
@@ -158,6 +159,43 @@ namespace TID3
             {
                 DiscogsTestStatus.Text = $"✗ Error: {ex.Message}";
                 DiscogsTestStatus.Foreground = System.Windows.Media.Brushes.Red;
+            }
+        }
+
+        private async void TestAcoustId_Click(object sender, RoutedEventArgs e)
+        {
+            AcoustIdTestStatus.Text = "Testing connection...";
+            AcoustIdTestStatus.Foreground = System.Windows.Media.Brushes.Orange;
+
+            try
+            {
+                var apiKey = AcoustIdApiKeyPasswordBox.Password;
+
+                if (string.IsNullOrWhiteSpace(apiKey))
+                {
+                    AcoustIdTestStatus.Text = "API Key required";
+                    AcoustIdTestStatus.Foreground = System.Windows.Media.Brushes.Red;
+                    return;
+                }
+
+                var acoustIdService = new AcoustIdService(apiKey);
+                var isConnectionValid = await acoustIdService.TestConnectionAsync();
+
+                if (isConnectionValid)
+                {
+                    AcoustIdTestStatus.Text = "✓ Connection successful";
+                    AcoustIdTestStatus.Foreground = System.Windows.Media.Brushes.LimeGreen;
+                }
+                else
+                {
+                    AcoustIdTestStatus.Text = "✗ Connection failed";
+                    AcoustIdTestStatus.Foreground = System.Windows.Media.Brushes.Red;
+                }
+            }
+            catch (Exception ex)
+            {
+                AcoustIdTestStatus.Text = $"✗ Error: {ex.Message}";
+                AcoustIdTestStatus.Foreground = System.Windows.Media.Brushes.Red;
             }
         }
 

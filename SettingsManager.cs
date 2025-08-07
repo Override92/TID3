@@ -33,6 +33,9 @@ namespace TID3
         [JsonPropertyName("discogs_secret")]
         public string DiscogsSecret { get; set; } = "";
 
+        [JsonPropertyName("acoustid_api_key")]
+        public string AcoustIdApiKey { get; set; } = "";
+
         // File Processing
         [JsonPropertyName("auto_save")]
         public bool AutoSave { get; set; } = false;
@@ -397,6 +400,11 @@ namespace TID3
         public static bool HasValidDiscogsCredentials(this AppSettings settings)
         {
             return !string.IsNullOrWhiteSpace(settings.DiscogsApiKey);
+        }
+
+        public static bool HasValidAcoustIdCredentials(this AppSettings settings)
+        {
+            return !string.IsNullOrWhiteSpace(settings.AcoustIdApiKey);
         }
     }
 }

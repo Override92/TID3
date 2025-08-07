@@ -752,6 +752,134 @@ namespace TID3
             }
         }
 
+        private async void FingerprintIdentify_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedFile == null) return;
+
+            var settings = SettingsManager.LoadSettings();
+            if (!settings.HasValidAcoustIdCredentials())
+            {
+                var result = MessageBox.Show(
+                    "AcoustID API key is not configured. Would you like to open settings to configure it?",
+                    "AcoustID Configuration Required",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    Settings_Click(sender, e);
+                }
+                return;
+            }
+
+            try
+            {
+                // Show progress indication in status bar or similar
+                var originalCursor = Cursor;
+                Cursor = System.Windows.Input.Cursors.Wait;
+
+                try
+                {
+                    var acoustIdService = new AcoustIdService(settings.AcoustIdApiKey);
+                    var results = await acoustIdService.IdentifyByFingerprintAsync(SelectedFile.FilePath);
+
+                    if (results.Any())
+                    {
+                        // Clear existing fingerprint results
+                        var existingFingerprint = _onlineSourceItems.Where(x => x.SourceType == "Fingerprint").ToList();
+                        foreach (var item in existingFingerprint)
+                        {
+                            _onlineSourceItems.Remove(item);
+                        }
+
+                        // Add new fingerprint results
+                        foreach (var result in results.Take(5))
+                        {
+                            var title = result.Title ?? "Unknown Title";
+                            var artist = result.Artist ?? "Unknown Artist";
+                            var album = result.Album ?? "Unknown Album";
+                            var score = (result.Score * 100).ToString("F1");
+                            
+                            var displayName = $"[Fingerprint {score}%] {artist} - {title}";
+                            if (!string.IsNullOrEmpty(album) && album != "Unknown Album")
+                                displayName += $" ({album})";
+                                
+                            _onlineSourceItems.Add(new OnlineSourceItem
+                            {
+                                DisplayName = displayName,
+                                Source = result,
+                                SourceType = "Fingerprint",
+                                Title = title,
+                                Artist = artist,
+                                Album = album,
+                                Score = score + "%",
+                                AdditionalInfo = $"Duration: {result.Duration}s" + 
+                                    (result.MusicBrainzId != null ? $", MB ID: {result.MusicBrainzId[..Math.Min(8, result.MusicBrainzId.Length)]}..." : ""),
+                                Data = result
+                            });
+                        }
+
+                        // Automatically apply the first (best) fingerprint result
+                        var bestResult = results.OrderByDescending(r => r.Score).First();
+                        var newTags = TagSnapshot.FromAcoustIdResult(bestResult, SelectedFile);
+                        
+                        // Apply the comparison using the existing tag comparison system
+                        SelectedFile.UpdateComparison(newTags, $"Fingerprint: {bestResult.Score * 100:F1}% match");
+                        
+                        // Select the best result in the dropdown if it exists
+                        var bestResultItem = _onlineSourceItems.FirstOrDefault(item => 
+                            item.SourceType == "Fingerprint" && 
+                            item.Data is AcoustIdResult result && 
+                            result.Score == bestResult.Score);
+                        
+                        if (bestResultItem != null)
+                        {
+                            OnlineSourceComboBox.SelectedItem = bestResultItem;
+                        }
+                        
+                        // Update apply button state
+                        UpdateApplyButtonState();
+                        
+                        // Refresh the tag comparison display
+                        UpdateComparisonDisplay();
+                        
+                        // Switch to comparison tab to show results
+                        InfoTabControl.SelectedIndex = 1; // Tag Comparison tab
+                        
+                    }
+                    else
+                    {
+                        MessageBox.Show("No matches found through audio fingerprinting.", "No Results", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                }
+                finally
+                {
+                    Cursor = originalCursor;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Show detailed error information for debugging
+                var errorDetails = $"Error Type: {ex.GetType().Name}\n" +
+                                 $"Message: {ex.Message}\n";
+                
+                if (ex.InnerException != null)
+                {
+                    errorDetails += $"\nInner Exception: {ex.InnerException.GetType().Name}\n" +
+                                  $"Inner Message: {ex.InnerException.Message}";
+                }
+                
+                if (ex is System.ComponentModel.Win32Exception win32Ex)
+                {
+                    errorDetails += $"\nWin32 Error Code: {win32Ex.ErrorCode} (0x{win32Ex.ErrorCode:X})";
+                }
+                
+                errorDetails += $"\nStack Trace: {ex.StackTrace}";
+                
+                MessageBox.Show(errorDetails, "Detailed Fingerprint Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private async void SearchDiscogs_Click(object sender, RoutedEventArgs e)
         {
             if (SelectedFile == null) return;
@@ -832,6 +960,10 @@ namespace TID3
                 else if (selectedSource.SourceType == "Discogs" && selectedSource.Source is DiscogsRelease discogsRelease)
                 {
                     newTags = TagSnapshot.FromDiscogsRelease(discogsRelease, null, SelectedFile);
+                }
+                else if (selectedSource.SourceType == "Fingerprint" && selectedSource.Source is AcoustIdResult acoustIdResult)
+                {
+                    newTags = TagSnapshot.FromAcoustIdResult(acoustIdResult, SelectedFile);
                 }
                 else
                 {
