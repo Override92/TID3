@@ -859,6 +859,7 @@
                             <ColumnDefinition Width="40"/>
                             <ColumnDefinition Width="180"/>
                             <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="120"/>
                             <ColumnDefinition Width="160"/>
                             <ColumnDefinition Width="100"/>
                             <ColumnDefinition Width="70"/>
@@ -890,37 +891,28 @@
                                   VerticalAlignment="Center" 
                                   Padding="4"/>
                                   
-                        <TextBlock Grid.Column="3" Text="File Name" 
+                        <TextBlock Grid.Column="3" Text="Album Artist" 
                                   FontWeight="SemiBold" 
                                   Foreground="{StaticResource TextBrush}" 
                                   FontSize="11" 
                                   VerticalAlignment="Center" 
                                   Padding="4"/>
                                   
-                        <TextBlock Grid.Column="4" Text="Genre" 
+                        <TextBlock Grid.Column="4" Text="File Name" 
                                   FontWeight="SemiBold" 
                                   Foreground="{StaticResource TextBrush}" 
                                   FontSize="11" 
                                   VerticalAlignment="Center" 
                                   Padding="4"/>
                                   
-                        <TextBlock Grid.Column="5" Text="Duration" 
+                        <TextBlock Grid.Column="5" Text="Genre" 
                                   FontWeight="SemiBold" 
                                   Foreground="{StaticResource TextBrush}" 
                                   FontSize="11" 
                                   VerticalAlignment="Center" 
-                                  HorizontalAlignment="Center" 
                                   Padding="4"/>
                                   
-                        <TextBlock Grid.Column="6" Text="Bitrate" 
-                                  FontWeight="SemiBold" 
-                                  Foreground="{StaticResource TextBrush}" 
-                                  FontSize="11" 
-                                  VerticalAlignment="Center" 
-                                  HorizontalAlignment="Center" 
-                                  Padding="4"/>
-                                  
-                        <TextBlock Grid.Column="7" Text="Year" 
+                        <TextBlock Grid.Column="6" Text="Duration" 
                                   FontWeight="SemiBold" 
                                   Foreground="{StaticResource TextBrush}" 
                                   FontSize="11" 
@@ -928,7 +920,23 @@
                                   HorizontalAlignment="Center" 
                                   Padding="4"/>
                                   
-                        <TextBlock Grid.Column="8" Text="Match" 
+                        <TextBlock Grid.Column="7" Text="Bitrate" 
+                                  FontWeight="SemiBold" 
+                                  Foreground="{StaticResource TextBrush}" 
+                                  FontSize="11" 
+                                  VerticalAlignment="Center" 
+                                  HorizontalAlignment="Center" 
+                                  Padding="4"/>
+                                  
+                        <TextBlock Grid.Column="8" Text="Year" 
+                                  FontWeight="SemiBold" 
+                                  Foreground="{StaticResource TextBrush}" 
+                                  FontSize="11" 
+                                  VerticalAlignment="Center" 
+                                  HorizontalAlignment="Center" 
+                                  Padding="4"/>
+                                  
+                        <TextBlock Grid.Column="9" Text="Match" 
                                   FontWeight="SemiBold" 
                                   Foreground="{StaticResource TextBrush}" 
                                   FontSize="11" 
@@ -1008,6 +1016,7 @@
                                     <ColumnDefinition Width="40"/>
                                     <ColumnDefinition Width="180"/>
                                     <ColumnDefinition Width="140"/>
+                                    <ColumnDefinition Width="120"/>
                                     <ColumnDefinition Width="160"/>
                                     <ColumnDefinition Width="100"/>
                                     <ColumnDefinition Width="70"/>
@@ -1042,7 +1051,7 @@
                                           TextTrimming="CharacterEllipsis"/>
                                           
                                 <TextBlock Grid.Column="3" 
-                                          Text="{Binding FileName}" 
+                                          Text="{Binding AlbumArtist}" 
                                           Foreground="{StaticResource SubTextBrush}" 
                                           FontSize="10"
                                           VerticalAlignment="Center"
@@ -1050,7 +1059,7 @@
                                           TextTrimming="CharacterEllipsis"/>
                                           
                                 <TextBlock Grid.Column="4" 
-                                          Text="{Binding Genre}" 
+                                          Text="{Binding FileName}" 
                                           Foreground="{StaticResource SubTextBrush}" 
                                           FontSize="10"
                                           VerticalAlignment="Center"
@@ -1058,6 +1067,14 @@
                                           TextTrimming="CharacterEllipsis"/>
                                           
                                 <TextBlock Grid.Column="5" 
+                                          Text="{Binding Genre}" 
+                                          Foreground="{StaticResource SubTextBrush}" 
+                                          FontSize="10"
+                                          VerticalAlignment="Center"
+                                          Padding="4"
+                                          TextTrimming="CharacterEllipsis"/>
+                                          
+                                <TextBlock Grid.Column="6" 
                                           Text="{Binding Duration}" 
                                           Foreground="{StaticResource SubTextBrush}" 
                                           FontSize="10"
@@ -1065,7 +1082,7 @@
                                           HorizontalAlignment="Center"
                                           Padding="4"/>
                                           
-                                <TextBlock Grid.Column="6" 
+                                <TextBlock Grid.Column="7" 
                                           Text="{Binding Bitrate}" 
                                           Foreground="{StaticResource SubTextBrush}" 
                                           FontSize="10"
@@ -1073,7 +1090,7 @@
                                           HorizontalAlignment="Center"
                                           Padding="4"/>
                                           
-                                <TextBlock Grid.Column="7" 
+                                <TextBlock Grid.Column="8" 
                                           Text="{Binding Year}" 
                                           Foreground="{StaticResource SubTextBrush}" 
                                           FontSize="10"
@@ -1081,7 +1098,7 @@
                                           HorizontalAlignment="Center"
                                           Padding="4"/>
                                           
-                                <TextBlock Grid.Column="8" 
+                                <TextBlock Grid.Column="9" 
                                           Text="{Binding MatchScore}" 
                                           Foreground="{StaticResource AccentBrush}" 
                                           FontSize="10"

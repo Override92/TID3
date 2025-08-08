@@ -608,14 +608,11 @@ namespace TID3
         private void RebuildHierarchicalStructure()
         {
             var albumGroups = _audioFiles
-                .GroupBy(file => new { 
-                    Album = file.Album ?? "Unknown Album", 
-                    Artist = file.AlbumArtist ?? file.Artist ?? "Unknown Artist" 
-                })
+                .GroupBy(file => file.Album ?? "Unknown Album")
                 .Select(group => new AlbumGroup
                 {
-                    Album = group.Key.Album,
-                    Artist = group.Key.Artist,
+                    Album = group.Key,
+                    Artist = group.FirstOrDefault()?.AlbumArtist ?? group.FirstOrDefault()?.Artist ?? "Unknown Artist",
                     Year = group.Max(f => f.Year),
                     Genre = group.FirstOrDefault()?.Genre ?? "",
                     Tracks = new ObservableCollection<AudioFileInfo>(group.OrderBy(f => f.Track))
