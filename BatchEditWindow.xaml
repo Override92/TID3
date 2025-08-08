@@ -76,7 +76,107 @@
 
         <Style x:Key="ModernCheckBox" TargetType="CheckBox">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-            <Setter Property="Margin" Value="4,8,4,4"/>
+            <Setter Property="Margin" Value="0,4,0,4"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Background" Value="{StaticResource SecondaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <!-- Custom checkbox -->
+                            <Border x:Name="CheckboxBorder"
+                                    Grid.Column="0"
+                                    Width="18" Height="18"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="3"
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,8,0">
+                                
+                                <Grid>
+                                    <!-- Checkmark -->
+                                    <Path x:Name="CheckMark"
+                                          Width="12" Height="12"
+                                          Stretch="Uniform"
+                                          Fill="{StaticResource TextBrush}"
+                                          Data="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"
+                                          Visibility="Collapsed"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                                    
+                                    <!-- Indeterminate state -->
+                                    <Rectangle x:Name="IndeterminateMark"
+                                              Width="10" Height="2"
+                                              Fill="{StaticResource TextBrush}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Visibility="Collapsed"/>
+                                </Grid>
+                            </Border>
+                            
+                            <!-- Content -->
+                            <ContentPresenter Grid.Column="1"
+                                            Content="{TemplateBinding Content}"
+                                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                                            VerticalAlignment="Center"
+                                            HorizontalAlignment="Left"
+                                            Margin="0,0,0,0"
+                                            TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Grid>
+                        
+                        <ControlTemplate.Triggers>
+                            <!-- Checked state -->
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="CheckboxBorder" Property="Background" Value="{StaticResource PrimaryBrush}"/>
+                                <Setter TargetName="CheckboxBorder" Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
+                                <Setter TargetName="CheckMark" Property="Fill" Value="White"/>
+                            </Trigger>
+                            
+                            <!-- Indeterminate state -->
+                            <Trigger Property="IsChecked" Value="{x:Null}">
+                                <Setter TargetName="IndeterminateMark" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="CheckboxBorder" Property="Background" Value="{StaticResource PrimaryBrush}"/>
+                                <Setter TargetName="CheckboxBorder" Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
+                                <Setter TargetName="IndeterminateMark" Property="Fill" Value="White"/>
+                            </Trigger>
+                            
+                            <!-- Hover state -->
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CheckboxBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            </Trigger>
+                            
+                            <!-- Hover + Checked state -->
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                    <Condition Property="IsChecked" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="CheckboxBorder" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="CheckboxBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            </MultiTrigger>
+                            
+                            <!-- Disabled state -->
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="CheckboxBorder" Property="Background" Value="#FF3A3A3A"/>
+                                <Setter TargetName="CheckboxBorder" Property="BorderBrush" Value="#FF555555"/>
+                                <Setter Property="Foreground" Value="#FF888888"/>
+                                <Setter TargetName="CheckMark" Property="Fill" Value="#FF888888"/>
+                                <Setter TargetName="IndeterminateMark" Property="Fill" Value="#FF888888"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style x:Key="ModernLabel" TargetType="Label">
@@ -110,7 +210,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- Batch Edit Form -->
-            <ScrollViewer Grid.Column="0" Style="{StaticResource ModernScrollViewer}">
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <TextBlock Text="Batch Edit Settings" 
                               FontSize="16" 
@@ -219,7 +319,7 @@
                                 <DataTemplate>
                                     <CheckBox Content="{Binding FileName}" 
                                              IsChecked="True"
-                                             Foreground="{StaticResource TextBrush}"
+                                             Style="{StaticResource ModernCheckBox}"
                                              Margin="0,2"
                                              Tag="{Binding}"/>
                                 </DataTemplate>

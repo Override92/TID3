@@ -10,6 +10,7 @@
         WindowStartupLocation="CenterScreen"
         Background="#FF1E1E1E"
         Loaded="Window_Loaded"
+        KeyDown="Window_KeyDown"
         d:DesignHeight="800" d:DesignWidth="1200">
 
     <Window.Resources>
@@ -25,6 +26,112 @@
 
         <!-- Boolean to Visibility Converter -->
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+
+        <!-- Modern CheckBox Style -->
+        <Style x:Key="ModernCheckBox" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Margin" Value="0,4,0,4"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Background" Value="{StaticResource SecondaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <!-- Custom checkbox -->
+                            <Border x:Name="CheckboxBorder"
+                                    Grid.Column="0"
+                                    Width="18" Height="18"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="3"
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,8,0">
+                                
+                                <Grid>
+                                    <!-- Checkmark -->
+                                    <Path x:Name="CheckMark"
+                                          Width="12" Height="12"
+                                          Stretch="Uniform"
+                                          Fill="{StaticResource TextBrush}"
+                                          Data="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"
+                                          Visibility="Collapsed"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                                    
+                                    <!-- Indeterminate state -->
+                                    <Rectangle x:Name="IndeterminateMark"
+                                              Width="10" Height="2"
+                                              Fill="{StaticResource TextBrush}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Visibility="Collapsed"/>
+                                </Grid>
+                            </Border>
+                            
+                            <!-- Content -->
+                            <ContentPresenter Grid.Column="1"
+                                            Content="{TemplateBinding Content}"
+                                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                                            VerticalAlignment="Center"
+                                            HorizontalAlignment="Left"
+                                            Margin="0,0,0,0"
+                                            TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Grid>
+                        
+                        <ControlTemplate.Triggers>
+                            <!-- Checked state -->
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="CheckboxBorder" Property="Background" Value="{StaticResource PrimaryBrush}"/>
+                                <Setter TargetName="CheckboxBorder" Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
+                                <Setter TargetName="CheckMark" Property="Fill" Value="White"/>
+                            </Trigger>
+                            
+                            <!-- Indeterminate state -->
+                            <Trigger Property="IsChecked" Value="{x:Null}">
+                                <Setter TargetName="IndeterminateMark" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="CheckboxBorder" Property="Background" Value="{StaticResource PrimaryBrush}"/>
+                                <Setter TargetName="CheckboxBorder" Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
+                                <Setter TargetName="IndeterminateMark" Property="Fill" Value="White"/>
+                            </Trigger>
+                            
+                            <!-- Hover state -->
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CheckboxBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            </Trigger>
+                            
+                            <!-- Hover + Checked state -->
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                    <Condition Property="IsChecked" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="CheckboxBorder" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="CheckboxBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            </MultiTrigger>
+                            
+                            <!-- Disabled state -->
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="CheckboxBorder" Property="Background" Value="#FF3A3A3A"/>
+                                <Setter TargetName="CheckboxBorder" Property="BorderBrush" Value="#FF555555"/>
+                                <Setter Property="Foreground" Value="#FF888888"/>
+                                <Setter TargetName="CheckMark" Property="Fill" Value="#FF888888"/>
+                                <Setter TargetName="IndeterminateMark" Property="Fill" Value="#FF888888"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <!-- Modern DataGrid Style with Custom ScrollBars -->
         <Style x:Key="ModernDataGridWithScrollBars" TargetType="{x:Type DataGrid}">
@@ -374,6 +481,30 @@
             </Setter>
         </Style>
 
+        <Style x:Key="ModernTreeView" TargetType="TreeView">
+            <Setter Property="Background" Value="{StaticResource SecondaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TreeView">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ScrollViewer x:Name="TreeViewScrollViewer"
+                                        Style="{StaticResource Windows11ScrollViewer}"
+                                        HorizontalScrollBarVisibility="Auto"
+                                        VerticalScrollBarVisibility="Auto"
+                                        CanContentScroll="True"
+                                        Focusable="False">
+                                <ItemsPresenter/>
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="ModernComboBox" TargetType="ComboBox">
             <Setter Property="Background" Value="{StaticResource SecondaryBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
@@ -540,7 +671,14 @@
         <TextBlock Grid.Row="0" Text="TID3 - Advanced ID3 Tag Editor" Style="{StaticResource HeaderText}"/>
 
         <!-- Toolbar -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+        <Grid Grid.Row="1" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            
+            <!-- Left side buttons -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
             <Button Click="LoadFiles_Click" Style="{StaticResource ModernButton}">
                 <StackPanel Orientation="Horizontal">
                     <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
@@ -626,7 +764,7 @@
                     <Rectangle Grid.Column="1" 
                                Fill="#FFEB743B" 
                                Width="2" 
-                               HorizontalAlignment="Center"/>
+                               HorizontalAlignment="Center" StrokeThickness="0"/>
                     
                     <!-- Fingerprint Side -->
                     <Button Grid.Column="2" 
@@ -674,29 +812,26 @@
 
             <Separator Width="12" Background="Transparent"/>
 
-            <Button Click="BatchEdit_Click" Style="{StaticResource ModernButton}">
-                <StackPanel Orientation="Horizontal">
-                    <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
-                          Data="M230.91,172A8,8,0,0,1,228,182.91l-96,56a8,8,0,0,1-8.06,0l-96-56A8,8,0,0,1,36,169.09l92,53.65,92-53.65A8,8,0,0,1,230.91,172ZM220,121.09l-92,53.65L36,121.09A8,8,0,0,0,28,134.91l96,56a8,8,0,0,0,8.06,0l96-56A8,8,0,1,0,220,121.09ZM24,80a8,8,0,0,1,4-6.91l96-56a8,8,0,0,1,8.06,0l96,56a8,8,0,0,1,0,13.82l-96,56a8,8,0,0,1-8.06,0l-96-56A8,8,0,0,1,24,80Zm23.88,0L128,126.74,208.12,80,128,33.26Z"/>
-                    <TextBlock Text="Batch Edit" Margin="6,0,0,0" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
-
-            <Button Click="Settings_Click" Style="{StaticResource ModernButton}">
-                <StackPanel Orientation="Horizontal">
-                    <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
-                          Data="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm109.94-52.79a8,8,0,0,0-3.89-5.4l-29.83-17-.12-33.62a8,8,0,0,0-2.83-6.08,111.91,111.91,0,0,0-36.72-20.67,8,8,0,0,0-6.46.59L128,41.85,97.88,25a8,8,0,0,0-6.47-.6A112.1,112.1,0,0,0,54.73,45.15a8,8,0,0,0-2.83,6.07l-.15,33.65-29.83,17a8,8,0,0,0-3.89,5.4,106.47,106.47,0,0,0,0,41.56,8,8,0,0,0,3.89,5.4l29.83,17,.12,33.62a8,8,0,0,0,2.83,6.08,111.91,111.91,0,0,0,36.72,20.67,8,8,0,0,0,6.46-.59L128,214.15,158.12,231a7.91,7.91,0,0,0,3.9,1,8.09,8.09,0,0,0,2.57-.42,112.1,112.1,0,0,0,36.68-20.73,8,8,0,0,0,2.83-6.07l.15-33.65,29.83-17a8,8,0,0,0,3.89-5.4A106.47,106.47,0,0,0,237.94,107.21Zm-15,34.91-28.57,16.25a8,8,0,0,0-3,3c-.58,1-1.19,2.06-1.81,3.06a7.94,7.94,0,0,0-1.22,4.21l-.15,32.25a95.89,95.89,0,0,1-25.37,14.3L134,199.13a8,8,0,0,0-3.91-1h-.19c-1.21,0-2.43,0-3.64,0a8.08,8.08,0,0,0-4.1,1l-28.84,16.1A96,96,0,0,1,67.88,201l-.11-32.2a8,8,0,0,0-1.22-4.22c-.62-1-1.23-2-1.8-3.06a8.09,8.09,0,0,0-3-3.06l-28.6-16.29a90.49,90.49,0,0,1,0-28.26L61.67,97.63a8,8,0,0,0,3-3c.58-1,1.19-2.06,1.81-3.06a7.94,7.94,0,0,0,1.22-4.21l.15-32.25a95.89,95.89,0,0,1,25.37-14.3L122,56.87a8,8,0,0,0,4.1,1c1.21,0,2.43,0,3.64,0a8.08,8.08,0,0,0,4.1-1l28.84-16.1A96,96,0,0,1,188.12,55l.11,32.2a8,8,0,0,0,1.22,4.22c.62,1,1.23,2,1.8,3.06a8.09,8.09,0,0,0,3,3.06l28.6,16.29A90.49,90.49,0,0,1,222.9,142.12Z"/>
-                    <TextBlock Text="Settings" Margin="6,0,0,0" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
-            <Button Click="ClearList_Click" Style="{StaticResource ModernButton}" Background="#FFDC3545" Width="100" HorizontalAlignment="Right">
-                <StackPanel Orientation="Horizontal">
-                    <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
-                          Data="M235.5,216.81c-22.56-11-35.5-34.58-35.5-64.8V134.73a15.94,15.94,0,0,0-10.09-14.87L165,110a8,8,0,0,1-4.48-10.34l21.32-53a28,28,0,0,0-16.1-37,28.14,28.14,0,0,0-35.82,16,.61.61,0,0,0,0,.12L108.9,79a8,8,0,0,1-10.37,4.49L73.11,73.14A15.89,15.89,0,0,0,55.74,76.8C34.68,98.45,24,123.75,24,152a111.45,111.45,0,0,0,31.18,77.53A8,8,0,0,0,61,232H232a8,8,0,0,0,3.5-15.19ZM67.14,88l25.41,10.3a24,24,0,0,0,31.23-13.45l21-53c2.56-6.11,9.47-9.27,15.43-7a12,12,0,0,1,6.88,15.92L145.69,93.76a24,24,0,0,0,13.43,31.14L184,134.73V152c0,.33,0,.66,0,1L55.77,101.71A108.84,108.84,0,0,1,67.14,88Zm48,128a87.53,87.53,0,0,1-24.34-42,8,8,0,0,0-15.49,4,105.16,105.16,0,0,0,18.36,38H64.44A95.54,95.54,0,0,1,40,152a85.9,85.9,0,0,1,7.73-36.29l137.8,55.12c3,18,10.56,33.48,21.89,45.16Z"/>
-                    <TextBlock Text="Clear List" Margin="6,0,0,0" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
-        </StackPanel>
+            </StackPanel>
+            
+            <!-- Right side buttons -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Click="Settings_Click" Style="{StaticResource ModernButton}">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
+                              Data="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm109.94-52.79a8,8,0,0,0-3.89-5.4l-29.83-17-.12-33.62a8,8,0,0,0-2.83-6.08,111.91,111.91,0,0,0-36.72-20.67,8,8,0,0,0-6.46.59L128,41.85,97.88,25a8,8,0,0,0-6.47-.6A112.1,112.1,0,0,0,54.73,45.15a8,8,0,0,0-2.83,6.07l-.15,33.65-29.83,17a8,8,0,0,0-3.89,5.4,106.47,106.47,0,0,0,0,41.56,8,8,0,0,0,3.89,5.4l29.83,17,.12,33.62a8,8,0,0,0,2.83,6.08,111.91,111.91,0,0,0,36.72,20.67,8,8,0,0,0,6.46-.59L128,214.15,158.12,231a7.91,7.91,0,0,0,3.9,1,8.09,8.09,0,0,0,2.57-.42,112.1,112.1,0,0,0,36.68-20.73,8,8,0,0,0,2.83-6.07l.15-33.65,29.83-17a8,8,0,0,0,3.89-5.4A106.47,106.47,0,0,0,237.94,107.21Zm-15,34.91-28.57,16.25a8,8,0,0,0-3,3c-.58,1-1.19,2.06-1.81,3.06a7.94,7.94,0,0,0-1.22,4.21l-.15,32.25a95.89,95.89,0,0,1-25.37,14.3L134,199.13a8,8,0,0,0-3.91-1h-.19c-1.21,0-2.43,0-3.64,0a8.08,8.08,0,0,0-4.1,1l-28.84,16.1A96,96,0,0,1,67.88,201l-.11-32.2a8,8,0,0,0-1.22-4.22c-.62-1-1.23-2-1.8-3.06a8.09,8.09,0,0,0-3-3.06l-28.6-16.29a90.49,90.49,0,0,1,0-28.26L61.67,97.63a8,8,0,0,0,3-3c.58-1,1.19-2.06,1.81-3.06a7.94,7.94,0,0,0,1.22-4.21l.15-32.25a95.89,95.89,0,0,1,25.37-14.3L122,56.87a8,8,0,0,0,4.1,1c1.21,0,2.43,0,3.64,0a8.08,8.08,0,0,0,4.1-1l28.84-16.1A96,96,0,0,1,188.12,55l.11,32.2a8,8,0,0,0,1.22,4.22c.62,1,1.23,2,1.8,3.06a8.09,8.09,0,0,0,3,3.06l28.6,16.29A90.49,90.49,0,0,1,222.9,142.12Z"/>
+                        <TextBlock Text="Settings" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Click="ClearList_Click" Style="{StaticResource ModernButton}" Background="#FFDC3545" Width="100">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
+                              Data="M235.5,216.81c-22.56-11-35.5-34.58-35.5-64.8V134.73a15.94,15.94,0,0,0-10.09-14.87L165,110a8,8,0,0,1-4.48-10.34l21.32-53a28,28,0,0,0-16.1-37a28.14,28.14,0,0,0-35.82,16,.61.61,0,0,0,0,.12L108.9,79a8,8,0,0,1-10.37,4.49L73.11,73.14A15.89,15.89,0,0,0,55.74,76.8C34.68,98.45,24,123.75,24,152a111.45,111.45,0,0,0,31.18,77.53A8,8,0,0,0,61,232H232a8,8,0,0,0,3.5-15.19ZM67.14,88l25.41,10.3a24,24,0,0,0,31.23-13.45l21-53c2.56-6.11,9.47-9.27,15.43-7a12,12,0,0,1,6.88,15.92L145.69,93.76a24,24,0,0,0,13.43,31.14L184,134.73V152c0,.33,0,.66,0,1L55.77,101.71A108.84,108.84,0,0,1,67.14,88Zm48,128a87.53,87.53,0,0,1-24.34-42,8,8,0,0,0-15.49,4,105.16,105.16,0,0,0,18.36,38H64.44A95.54,95.54,0,0,1,40,152a85.9,85.9,0,0,1,7.73-36.29l137.8,55.12c3,18,10.56,33.48,21.89,45.16Z"/>
+                        <TextBlock Text="Clear List" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
 
         <!-- File List -->
         <Grid Grid.Row="2">
@@ -706,96 +841,405 @@
                 <ColumnDefinition Width="300"/>
             </Grid.ColumnDefinitions>
 
-            <!-- DataGrid -->
-            <DataGrid Grid.Column="0" 
-                      ItemsSource="{Binding AudioFiles}"
-                      SelectedItem="{Binding SelectedFile}"
-                      Style="{StaticResource ModernDataGridWithScrollBars}"
-                      ColumnHeaderStyle="{StaticResource ModernColumnHeaderStyle}"
-                      RowStyle="{StaticResource ModernDataGridRowStyle}"
-                      CellStyle="{StaticResource ModernDataGridCellStyle}"
-                      AutoGenerateColumns="False"
-                      VirtualizingPanel.IsVirtualizing="True"
-                      VirtualizingPanel.VirtualizationMode="Recycling"
-                      VirtualizingPanel.IsContainerVirtualizable="True"
-                      VirtualizingPanel.ScrollUnit="Pixel"
-                      ScrollViewer.CanContentScroll="True"
-                      ScrollViewer.IsDeferredScrollingEnabled="True"
-                      EnableRowVirtualization="True"
-                      EnableColumnVirtualization="True">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="File Name" Binding="{Binding FileName}" Width="3*" MinWidth="150"/>
-                    <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="2.5*" MinWidth="120"/>
-                    <DataGridTextColumn Header="Artist" Binding="{Binding Artist}" Width="2*" MinWidth="100"/>
-                    <DataGridTextColumn Header="Album" Binding="{Binding Album}" Width="2*" MinWidth="100"/>
-                    <DataGridTextColumn Header="Year" Binding="{Binding Year}" Width="0.8*" MinWidth="60"/>
-                    <DataGridTextColumn Header="Track" Binding="{Binding Track}" Width="0.6*" MinWidth="50"/>
-                    <DataGridTextColumn Header="Duration" Binding="{Binding Duration}" Width="1*" MinWidth="70"/>
-                    <DataGridTextColumn Header="Bitrate" Binding="{Binding Bitrate}" Width="1*" MinWidth="80"/>
-                </DataGrid.Columns>
-            </DataGrid>
+            <!-- File List Section -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                
+                <!-- Column Headers -->
+                <Border Grid.Row="0" 
+                        Background="{StaticResource SecondaryBrush}" 
+                        BorderThickness="1,1,1,0" 
+                        BorderBrush="{StaticResource BorderBrush}"
+                        Padding="16,0,0,0">
+                    <Grid MinHeight="28">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="40"/>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="160"/>
+                            <ColumnDefinition Width="100"/>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="80"/>
+                            <ColumnDefinition Width="60"/>
+                            <ColumnDefinition Width="80"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <TextBlock Grid.Column="0" Text="#" 
+                                  FontWeight="SemiBold" 
+                                  Foreground="{StaticResource TextBrush}" 
+                                  FontSize="11" 
+                                  VerticalAlignment="Center" 
+                                  HorizontalAlignment="Center" 
+                                  Padding="4"/>
+                                  
+                        <TextBlock Grid.Column="1" Text="Title" 
+                                  FontWeight="SemiBold" 
+                                  Foreground="{StaticResource TextBrush}" 
+                                  FontSize="11" 
+                                  VerticalAlignment="Center" 
+                                  Padding="8,4"/>
+                                  
+                        <TextBlock Grid.Column="2" Text="Artist" 
+                                  FontWeight="SemiBold" 
+                                  Foreground="{StaticResource TextBrush}" 
+                                  FontSize="11" 
+                                  VerticalAlignment="Center" 
+                                  Padding="4"/>
+                                  
+                        <TextBlock Grid.Column="3" Text="File Name" 
+                                  FontWeight="SemiBold" 
+                                  Foreground="{StaticResource TextBrush}" 
+                                  FontSize="11" 
+                                  VerticalAlignment="Center" 
+                                  Padding="4"/>
+                                  
+                        <TextBlock Grid.Column="4" Text="Genre" 
+                                  FontWeight="SemiBold" 
+                                  Foreground="{StaticResource TextBrush}" 
+                                  FontSize="11" 
+                                  VerticalAlignment="Center" 
+                                  Padding="4"/>
+                                  
+                        <TextBlock Grid.Column="5" Text="Duration" 
+                                  FontWeight="SemiBold" 
+                                  Foreground="{StaticResource TextBrush}" 
+                                  FontSize="11" 
+                                  VerticalAlignment="Center" 
+                                  HorizontalAlignment="Center" 
+                                  Padding="4"/>
+                                  
+                        <TextBlock Grid.Column="6" Text="Bitrate" 
+                                  FontWeight="SemiBold" 
+                                  Foreground="{StaticResource TextBrush}" 
+                                  FontSize="11" 
+                                  VerticalAlignment="Center" 
+                                  HorizontalAlignment="Center" 
+                                  Padding="4"/>
+                                  
+                        <TextBlock Grid.Column="7" Text="Year" 
+                                  FontWeight="SemiBold" 
+                                  Foreground="{StaticResource TextBrush}" 
+                                  FontSize="11" 
+                                  VerticalAlignment="Center" 
+                                  HorizontalAlignment="Center" 
+                                  Padding="4"/>
+                                  
+                        <TextBlock Grid.Column="8" Text="Match" 
+                                  FontWeight="SemiBold" 
+                                  Foreground="{StaticResource TextBrush}" 
+                                  FontSize="11" 
+                                  VerticalAlignment="Center" 
+                                  HorizontalAlignment="Center" 
+                                  Padding="4"/>
+                    </Grid>
+                </Border>
+                
+                <!-- Hierarchical TreeView -->
+                <TreeView Grid.Row="1" 
+                          Name="MainTreeView"
+                          ItemsSource="{Binding HierarchicalItems}"
+                          SelectedItemChanged="MainTreeView_SelectedItemChanged"
+                          PreviewKeyDown="MainTreeView_KeyDown"
+                          Focusable="True"
+                          Style="{StaticResource ModernTreeView}"
+                          BorderThickness="1,0,1,1"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling">
+                
+                <TreeView.Resources>
+                    <!-- Album Group Template -->
+                    <HierarchicalDataTemplate DataType="{x:Type local:AlbumGroup}" ItemsSource="{Binding Tracks}">
+                        <Border Background="{StaticResource PrimaryBrush}" 
+                                CornerRadius="3" 
+                                Padding="8,4" 
+                                Margin="0,1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <!-- Disk Icon -->
+                                <Viewbox Grid.Column="0" 
+                                         Width="18" Height="18"
+                                         VerticalAlignment="Center">
+                                    <Path Fill="White"
+                                          Data="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm39.2,96a39.77,39.77,0,0,0-5.84-14l34.23-34.24a87.54,87.54,0,0,1,20,48.28ZM152,128a24,24,0,1,1-24-24A24,24,0,0,1,152,128Zm-24,88A88,88,0,1,1,184.28,60.4L150,94.64A40,40,0,1,0,167.2,136h48.43A88.11,88.11,0,0,1,128,216Z"/>
+                                </Viewbox>
+                                
+                                <StackPanel Grid.Column="2" Orientation="Vertical">
+                                    <TextBlock Text="{Binding AlbumInfo}" 
+                                              FontWeight="SemiBold" 
+                                              Foreground="White" 
+                                              FontSize="13"/>
+                                    <TextBlock Text="{Binding ArtistInfo}" 
+                                              Foreground="White" 
+                                              FontSize="11" 
+                                              Opacity="0.9"/>
+                                </StackPanel>
+                                
+                                <TextBlock Grid.Column="3" 
+                                          Text="{Binding TrackCount}" 
+                                          Foreground="White" 
+                                          FontSize="10" 
+                                          VerticalAlignment="Center"
+                                          Opacity="0.8"/>
+                            </Grid>
+                        </Border>
+                    </HierarchicalDataTemplate>
+                    
+                    <!-- Track Template -->
+                    <DataTemplate DataType="{x:Type local:AudioFileInfo}">
+                        <Border Background="{StaticResource BackgroundBrush}" 
+                                CornerRadius="2" 
+                                Padding="0" 
+                                Margin="16,0,0,1"
+                                BorderThickness="0,0,0,1"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                MinHeight="26">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="180"/>
+                                    <ColumnDefinition Width="140"/>
+                                    <ColumnDefinition Width="160"/>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="70"/>
+                                    <ColumnDefinition Width="80"/>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="80"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <TextBlock Grid.Column="0" 
+                                          Text="{Binding Track}" 
+                                          Foreground="{StaticResource SubTextBrush}" 
+                                          FontSize="11"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Center"
+                                          Padding="4"/>
+                                          
+                                <TextBlock Grid.Column="1" 
+                                          Text="{Binding Title}" 
+                                          Foreground="{StaticResource TextBrush}" 
+                                          FontSize="12"
+                                          VerticalAlignment="Center"
+                                          Padding="8,4"
+                                          TextTrimming="CharacterEllipsis"/>
+                                          
+                                <TextBlock Grid.Column="2" 
+                                          Text="{Binding Artist}" 
+                                          Foreground="{StaticResource SubTextBrush}" 
+                                          FontSize="10"
+                                          VerticalAlignment="Center"
+                                          Padding="4"
+                                          TextTrimming="CharacterEllipsis"/>
+                                          
+                                <TextBlock Grid.Column="3" 
+                                          Text="{Binding FileName}" 
+                                          Foreground="{StaticResource SubTextBrush}" 
+                                          FontSize="10"
+                                          VerticalAlignment="Center"
+                                          Padding="4"
+                                          TextTrimming="CharacterEllipsis"/>
+                                          
+                                <TextBlock Grid.Column="4" 
+                                          Text="{Binding Genre}" 
+                                          Foreground="{StaticResource SubTextBrush}" 
+                                          FontSize="10"
+                                          VerticalAlignment="Center"
+                                          Padding="4"
+                                          TextTrimming="CharacterEllipsis"/>
+                                          
+                                <TextBlock Grid.Column="5" 
+                                          Text="{Binding Duration}" 
+                                          Foreground="{StaticResource SubTextBrush}" 
+                                          FontSize="10"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Center"
+                                          Padding="4"/>
+                                          
+                                <TextBlock Grid.Column="6" 
+                                          Text="{Binding Bitrate}" 
+                                          Foreground="{StaticResource SubTextBrush}" 
+                                          FontSize="10"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Center"
+                                          Padding="4"/>
+                                          
+                                <TextBlock Grid.Column="7" 
+                                          Text="{Binding Year}" 
+                                          Foreground="{StaticResource SubTextBrush}" 
+                                          FontSize="10"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Center"
+                                          Padding="4"/>
+                                          
+                                <TextBlock Grid.Column="8" 
+                                          Text="{Binding MatchScore}" 
+                                          Foreground="{StaticResource AccentBrush}" 
+                                          FontSize="10"
+                                          FontWeight="SemiBold"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Center"
+                                          Padding="4"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </TreeView.Resources>
+                
+                <TreeView.ItemContainerStyle>
+                    <Style TargetType="TreeViewItem">
+                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                        <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Margin" Value="0"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </TreeView.ItemContainerStyle>
+            </TreeView>
+            </Grid>
 
             <GridSplitter Grid.Column="1" Background="{StaticResource BorderBrush}" 
                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Padding="2,2,2,2" Margin="2,0,0,0" Width="2"/>
 
             <!-- Tag Editor Panel -->
             <ScrollViewer Grid.Column="2" Style="{StaticResource Windows11ScrollViewer}">
-                <StackPanel Margin="7,0,0,0" DataContext="{Binding SelectedFile}">
-                    <TextBlock Text="Tag Editor" Style="{StaticResource HeaderText}" FontSize="16"/>
+                <StackPanel Margin="7,0,0,0">
+                    <!-- Header with selection info -->
+                    <StackPanel Margin="0,0,0,12">
+                        <TextBlock Name="EditorHeaderText" Text="Tag Editor" Style="{StaticResource HeaderText}" FontSize="16"/>
+                        <TextBlock Name="SelectionInfoText" Text="Select files to edit tags in batch" 
+                                  Foreground="{StaticResource SubTextBrush}" FontSize="11" Margin="0,2,0,0"/>
+                    </StackPanel>
 
-                    <Label Content="Title:" Style="{StaticResource ModernLabel}"/>
-                    <TextBox Margin="0,0,12,0" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" 
-                            Style="{StaticResource ModernTextBox}"/>
+                    <!-- Single file editing (visible when one file selected) -->
+                    <StackPanel Name="SingleEditPanel" DataContext="{Binding SelectedFile}" Visibility="Collapsed">
+                        <Label Content="Title:" Style="{StaticResource ModernLabel}"/>
+                        <TextBox Margin="0,0,12,0" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" 
+                                Style="{StaticResource ModernTextBox}"/>
 
-                    <Label Content="Artist:" Style="{StaticResource ModernLabel}" Margin="0,7,0,4"/>
-                    <TextBox Margin="0,0,12,0" Text="{Binding Artist, UpdateSourceTrigger=PropertyChanged}" 
-                            Style="{StaticResource ModernTextBox}"/>
+                        <Label Content="Artist:" Style="{StaticResource ModernLabel}" Margin="0,7,0,4"/>
+                        <TextBox Margin="0,0,12,0" Text="{Binding Artist, UpdateSourceTrigger=PropertyChanged}" 
+                                Style="{StaticResource ModernTextBox}"/>
 
-                    <Label Content="Album:" Style="{StaticResource ModernLabel}" Margin="0,7,0,4"/>
-                    <TextBox Margin="0,0,12,0" Text="{Binding Album, UpdateSourceTrigger=PropertyChanged}" 
-                            Style="{StaticResource ModernTextBox}"/>
+                        <Label Content="Album:" Style="{StaticResource ModernLabel}" Margin="0,7,0,4"/>
+                        <TextBox Margin="0,0,12,0" Text="{Binding Album, UpdateSourceTrigger=PropertyChanged}" 
+                                Style="{StaticResource ModernTextBox}"/>
 
-                    <Label Content="Album Artist:" Style="{StaticResource ModernLabel}" Margin="0,7,0,4"/>
-                    <TextBox Margin="0,0,12,0" Text="{Binding AlbumArtist, UpdateSourceTrigger=PropertyChanged}" 
-                            Style="{StaticResource ModernTextBox}"/>
+                        <Label Content="Album Artist:" Style="{StaticResource ModernLabel}" Margin="0,7,0,4"/>
+                        <TextBox Margin="0,0,12,0" Text="{Binding AlbumArtist, UpdateSourceTrigger=PropertyChanged}" 
+                                Style="{StaticResource ModernTextBox}"/>
 
-                    <Label Content="Genre:" Style="{StaticResource ModernLabel}" Margin="0,7,0,4"/>
-                    <TextBox Margin="0,0,12,0" Text="{Binding Genre, UpdateSourceTrigger=PropertyChanged}" 
-                            Style="{StaticResource ModernTextBox}"/>
+                        <Label Content="Genre:" Style="{StaticResource ModernLabel}" Margin="0,7,0,4"/>
+                        <TextBox Margin="0,0,12,0" Text="{Binding Genre, UpdateSourceTrigger=PropertyChanged}" 
+                                Style="{StaticResource ModernTextBox}"/>
 
-                    <Grid Margin="0,7,12,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
+                        <Grid Margin="0,7,12,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0">
-                            <Label Content="Year:" Style="{StaticResource ModernLabel}"/>
-                            <TextBox Text="{Binding Year, UpdateSourceTrigger=PropertyChanged}" 
-                                    Style="{StaticResource ModernTextBox}"/>
-                        </StackPanel>
+                            <StackPanel Grid.Column="0">
+                                <Label Content="Year:" Style="{StaticResource ModernLabel}"/>
+                                <TextBox Text="{Binding Year, UpdateSourceTrigger=PropertyChanged}" 
+                                        Style="{StaticResource ModernTextBox}"/>
+                            </StackPanel>
 
-                        <StackPanel Grid.Column="2">
-                            <Label Content="Track:" Style="{StaticResource ModernLabel}"/>
-                            <TextBox Text="{Binding Track, UpdateSourceTrigger=PropertyChanged}" 
-                                    Style="{StaticResource ModernTextBox}"/>
-                        </StackPanel>
-                    </Grid>
+                            <StackPanel Grid.Column="2">
+                                <Label Content="Track:" Style="{StaticResource ModernLabel}"/>
+                                <TextBox Text="{Binding Track, UpdateSourceTrigger=PropertyChanged}" 
+                                        Style="{StaticResource ModernTextBox}"/>
+                            </StackPanel>
+                        </Grid>
 
-                    <Label Content="Comment:" Style="{StaticResource ModernLabel}" Margin="0,7,0,4"/>
-                    <TextBox Margin="0,0,12,0" Text="{Binding Comment, UpdateSourceTrigger=PropertyChanged}" 
-                            Style="{StaticResource ModernTextBox}" 
-                            Height="60" 
-                            TextWrapping="Wrap" 
-                            AcceptsReturn="True"/>
+                        <Label Content="Comment:" Style="{StaticResource ModernLabel}" Margin="0,7,0,4"/>
+                        <TextBox Margin="0,0,12,0" Text="{Binding Comment, UpdateSourceTrigger=PropertyChanged}" 
+                                Style="{StaticResource ModernTextBox}" 
+                                Height="60" 
+                                TextWrapping="Wrap" 
+                                AcceptsReturn="True"/>
 
-                    <StackPanel Margin="0,20,0,0">
-                        <Button Margin="0,0,12,0" Click="SaveSelected_Click" Style="{StaticResource ModernButton}">
+                        <Button Margin="0,20,12,0" Click="SaveSelected_Click" Style="{StaticResource ModernButton}">
                             <StackPanel Orientation="Horizontal">
                                 <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
                                       Data="M208,32H83.31A15.86,15.86,0,0,0,72,36.69L36.69,72A15.86,15.86,0,0,0,32,83.31V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM88,48h80V80H88ZM208,208H48V83.31l24-24V80A16,16,0,0,0,88,96h80a16,16,0,0,0,16-16V48h24Zm-80-96a40,40,0,1,0,40,40A40,40,0,0,0,128,112Zm0,64a24,24,0,1,1,24-24A24,24,0,0,1,128,176Z"/>
                                 <TextBlock Text="Save This File" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Batch editing (visible when multiple files selected) -->
+                    <StackPanel Name="BatchEditPanel" Visibility="Collapsed">
+                        <TextBlock Text="Batch Edit Mode" 
+                                  FontWeight="SemiBold" 
+                                  Foreground="{StaticResource TextBrush}"
+                                  Margin="0,0,0,8"/>
+                        
+                        <TextBlock Text="Only checked fields will be updated for all selected files."
+                                  Foreground="{StaticResource SubTextBrush}"
+                                  FontSize="11"
+                                  TextWrapping="Wrap"
+                                  Margin="0,0,0,12"/>
+
+                        <!-- Album -->
+                        <CheckBox Name="BatchAlbumCheck" Content="Update Album" Style="{StaticResource ModernCheckBox}"/>
+                        <TextBox Name="BatchAlbumText" Style="{StaticResource ModernTextBox}" 
+                                Margin="0,0,12,4"
+                                IsEnabled="{Binding ElementName=BatchAlbumCheck, Path=IsChecked}"/>
+
+                        <!-- Album Artist -->
+                        <CheckBox Name="BatchAlbumArtistCheck" Content="Update Album Artist" Style="{StaticResource ModernCheckBox}" Margin="0,8,0,4"/>
+                        <TextBox Name="BatchAlbumArtistText" Style="{StaticResource ModernTextBox}"
+                                Margin="0,0,12,4"
+                                IsEnabled="{Binding ElementName=BatchAlbumArtistCheck, Path=IsChecked}"/>
+
+                        <!-- Genre -->
+                        <CheckBox Name="BatchGenreCheck" Content="Update Genre" Style="{StaticResource ModernCheckBox}" Margin="0,8,0,4"/>
+                        <TextBox Name="BatchGenreText" Style="{StaticResource ModernTextBox}"
+                                Margin="0,0,12,4"
+                                IsEnabled="{Binding ElementName=BatchGenreCheck, Path=IsChecked}"/>
+
+                        <!-- Year -->
+                        <CheckBox Name="BatchYearCheck" Content="Update Year" Style="{StaticResource ModernCheckBox}" Margin="0,8,0,4"/>
+                        <TextBox Name="BatchYearText" Style="{StaticResource ModernTextBox}"
+                                Margin="0,0,12,4"
+                                IsEnabled="{Binding ElementName=BatchYearCheck, Path=IsChecked}"/>
+
+                        <!-- Advanced Options -->
+                        <TextBlock Text="Advanced Options" 
+                                  FontWeight="SemiBold" 
+                                  Foreground="{StaticResource TextBrush}"
+                                  Margin="0,16,0,8"/>
+
+                        <CheckBox Name="BatchAutoNumberCheck" Content="Auto-number tracks (1, 2, 3...)" 
+                                 Style="{StaticResource ModernCheckBox}"/>
+
+                        <CheckBox Name="BatchCleanupCheck" Content="Remove empty tags" 
+                                 Style="{StaticResource ModernCheckBox}"/>
+
+                        <!-- Apply Button -->
+                        <Button Margin="0,20,12,0" Click="ApplyBatchEdit_Click" Style="{StaticResource ModernButton}"
+                                Background="#FF28A745">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
+                                      Data="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/>
+                                <TextBlock Text="Apply to Selected Files" Margin="6,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -991,7 +1435,7 @@
 
                                     <CheckBox x:Name="ShowEmptyFieldsCheckBox" 
                                              Content="Show empty fields"
-                                             Foreground="{StaticResource TextBrush}"
+                                             Style="{StaticResource ModernCheckBox}"
                                              Margin="16,0,0,0"
                                              IsChecked="False"
                                              Checked="ShowEmptyFields_Changed"
