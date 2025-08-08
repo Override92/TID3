@@ -35,15 +35,23 @@ namespace TID3
         
         private static void SetDarkTitleBar(IntPtr handle)
         {
-            var darkMode = 1; // 1 = dark, 0 = light
-            
-            // Try Windows 11/newer Windows 10 attribute first
-            int result = DwmSetWindowAttribute(handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
-            
-            // If that fails, try the older attribute for Windows 10 versions before 20H1
-            if (result != 0)
+            try
             {
-                DwmSetWindowAttribute(handle, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref darkMode, sizeof(int));
+                var darkMode = 1; // 1 = dark, 0 = light
+                
+                // Try Windows 11/newer Windows 10 attribute first
+                int result = DwmSetWindowAttribute(handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
+                
+                // If that fails, try the older attribute for Windows 10 versions before 20H1
+                if (result != 0)
+                {
+                    DwmSetWindowAttribute(handle, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref darkMode, sizeof(int));
+                }
+            }
+            catch
+            {
+                // Silently fail if dark title bar isn't supported
+                // Application will continue to work normally
             }
         }
         
@@ -812,14 +820,7 @@ namespace TID3
         private bool HasUnsavedChanges()
         {
             // Check if any files have pending changes in their tag comparison
-            foreach (var file in _audioFiles)
-            {
-                if (file.TagComparison != null && file.TagComparison.Any(c => c.IsAccepted && !c.IsRejected))
-                {
-                    return true;
-                }
-            }
-            return false;
+            return _audioFiles.Where(file => file.TagComparison != null && file.TagComparison.Any(c => c.IsAccepted && !c.IsRejected)).Any();
         }
 
         #endregion
@@ -968,7 +969,7 @@ namespace TID3
                         var bestResultItem = _onlineSourceItems.FirstOrDefault(item => 
                             item.SourceType == "Fingerprint" && 
                             item.Data is AcoustIdResult result && 
-                            result.Score == bestResult.Score);
+                            Math.Abs(result.Score - bestResult.Score) < 0.0001);
                         
                         if (bestResultItem != null)
                         {

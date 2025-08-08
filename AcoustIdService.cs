@@ -182,12 +182,10 @@ namespace TID3
 
                 // Parse output to extract fingerprint
                 var lines = output.Split('\n');
-                foreach (var line in lines)
+                var fingerprintLine = lines.Where(line => line.StartsWith("FINGERPRINT=")).FirstOrDefault();
+                if (fingerprintLine != null)
                 {
-                    if (line.StartsWith("FINGERPRINT="))
-                    {
-                        return line["FINGERPRINT=".Length..].Trim();
-                    }
+                    return fingerprintLine["FINGERPRINT=".Length..].Trim();
                 }
 
                 throw new InvalidOperationException("No fingerprint found in fpcalc output");
@@ -551,15 +549,7 @@ namespace TID3
                         @"C:\Windows\Media\ding.wav"
                     };
                     
-                    string? testFile = null;
-                    foreach (var file in testFiles)
-                    {
-                        if (System.IO.File.Exists(file))
-                        {
-                            testFile = file;
-                            break;
-                        }
-                    }
+                    string? testFile = testFiles.Where(System.IO.File.Exists).FirstOrDefault();
                     
                     if (testFile != null)
                     {
