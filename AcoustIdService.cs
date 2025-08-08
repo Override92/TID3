@@ -310,7 +310,7 @@ namespace TID3
             {
                 var url = "https://api.acoustid.org/v2/lookup";
                 
-                var content = new FormUrlEncodedContent([
+                using var content = new FormUrlEncodedContent([
                     new KeyValuePair<string, string>("client", _apiKey),
                     new KeyValuePair<string, string>("meta", "recordings"),
                     new KeyValuePair<string, string>("duration", duration.ToString()),
@@ -420,7 +420,7 @@ namespace TID3
             {
                 var url = $"https://musicbrainz.org/ws/2/recording/{recordingId}?fmt=json&inc=releases";
                 
-                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
                 request.Headers.Add("User-Agent", "TID3/1.0 (contact@example.com)");
                 
                 using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -620,7 +620,7 @@ namespace TID3
             {
                 // Test with the same POST method as the real API call
                 var url = "https://api.acoustid.org/v2/lookup";
-                var content = new FormUrlEncodedContent([
+                using var content = new FormUrlEncodedContent([
                     new KeyValuePair<string, string>("client", _apiKey),
                     new KeyValuePair<string, string>("duration", "120"),
                     new KeyValuePair<string, string>("fingerprint", "AQABz0qUokqdomWqlGmSRkmUDEkGJwaOQymPgkeOhkeOHs9w9MiPI0eUPkeSH8lw9OixhJCSH8dxJkeSJj2OJMpw3MCR4weSjkeOSkmW5DiSJ8exQzlyfEGOJ82R_NCBJMexI0cPH8lzJMdSPkd2lEiOIzl8FE9yJMVT")
