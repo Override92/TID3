@@ -242,16 +242,10 @@ namespace TID3
             {
                 if (basicInfo.TryGetProperty("artists", out var artistsElement) && artistsElement.ValueKind == JsonValueKind.Array)
                 {
-                    var artists = new List<string>();
-                    foreach (var artist in artistsElement.EnumerateArray())
-                    {
-                        if (artist.TryGetProperty("name", out var nameElement))
-                        {
-                            var artistName = nameElement.GetString();
-                            if (!string.IsNullOrEmpty(artistName))
-                                artists.Add(artistName);
-                        }
-                    }
+                    var artists = artistsElement.EnumerateArray()
+                        .Where(artist => artist.TryGetProperty("name", out var nameElement) && !string.IsNullOrEmpty(nameElement.GetString()))
+                        .Select(artist => artist.GetProperty("name").GetString()!)
+                        .ToList();
                     if (artists.Count > 0)
                         return string.Join(", ", artists);
                 }
@@ -268,16 +262,10 @@ namespace TID3
                 }
                 else if (artistElement.ValueKind == JsonValueKind.Array)
                 {
-                    var artists = new List<string>();
-                    foreach (var artist in artistElement.EnumerateArray())
-                    {
-                        if (artist.ValueKind == JsonValueKind.String)
-                        {
-                            var artistName = artist.GetString();
-                            if (!string.IsNullOrEmpty(artistName))
-                                artists.Add(artistName);
-                        }
-                    }
+                    var artists = artistElement.EnumerateArray()
+                        .Where(artist => artist.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(artist.GetString()))
+                        .Select(artist => artist.GetString()!)
+                        .ToList();
                     if (artists.Count > 0)
                         return string.Join(", ", artists);
                 }
@@ -304,16 +292,10 @@ namespace TID3
         {
             if (element.TryGetProperty("genre", out var genreElement) && genreElement.ValueKind == JsonValueKind.Array)
             {
-                var genres = new List<string>();
-                foreach (var genre in genreElement.EnumerateArray())
-                {
-                    if (genre.ValueKind == JsonValueKind.String)
-                    {
-                        var genreName = genre.GetString();
-                        if (!string.IsNullOrEmpty(genreName))
-                            genres.Add(genreName);
-                    }
-                }
+                var genres = genreElement.EnumerateArray()
+                    .Where(genre => genre.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(genre.GetString()))
+                    .Select(genre => genre.GetString()!)
+                    .ToList();
                 return string.Join(", ", genres);
             }
             return "";

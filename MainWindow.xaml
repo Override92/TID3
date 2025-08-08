@@ -722,7 +722,6 @@
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="2"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     
@@ -760,14 +759,9 @@
                         </StackPanel>
                     </Button>
                     
-                    <!-- Separator -->
-                    <Rectangle Grid.Column="1" 
-                               Fill="#FFEB743B" 
-                               Width="2" 
-                               HorizontalAlignment="Center" StrokeThickness="0"/>
                     
                     <!-- Fingerprint Side -->
-                    <Button Grid.Column="2" 
+                    <Button Grid.Column="1" 
                             Name="FingerprintSide"
                             Click="FingerprintIdentify_Click"
                             Background="#FFEB743B"
