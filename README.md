@@ -11,6 +11,7 @@
 [![WPF](https://img.shields.io/badge/WPF-Modern%20UI-2D5699?style=flat-square)](https://docs.microsoft.com/en-us/dotnet/desktop/wpf/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/R6R41JCKWA)
 </div>
 
 ## ✨ Features
