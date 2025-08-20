@@ -16,6 +16,8 @@ using System.Windows.Interop;
 using System.Windows.Threading;
 using System.Windows.Media;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Markup;
 using Microsoft.Win32;
 
 namespace TID3
@@ -78,11 +80,14 @@ namespace TID3
         private readonly MusicBrainzService _musicBrainzService;
         private readonly DiscogsService _discogsService;
         private readonly UpdateService _updateService;
+        private readonly OnlineSourceCacheManager _cacheManager;
         private readonly ObservableCollection<AudioFileInfo> _audioFiles;
         private readonly ObservableCollection<OnlineSourceItem> _onlineSourceItems;
+        private readonly ObservableCollection<AlbumGroup> _hierarchicalItems;
 
         public ObservableCollection<AudioFileInfo> AudioFiles => _audioFiles;
         public ObservableCollection<OnlineSourceItem> OnlineSourceItems => _onlineSourceItems;
+        public ObservableCollection<AlbumGroup> HierarchicalItems => _hierarchicalItems;
 
         private AudioFileInfo? _selectedFile;
         public AudioFileInfo? SelectedFile
@@ -99,8 +104,17 @@ namespace TID3
                 _selectedFile = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsFileSelected));
-                // Clear the online source dropdown when switching files
+                
+                // Load cached online source results for the selected file
                 _onlineSourceItems.Clear();
+                if (_selectedFile != null)
+                {
+                    var cachedResults = _cacheManager.GetResults(_selectedFile.FilePath);
+                    foreach (var result in cachedResults)
+                    {
+                        _onlineSourceItems.Add(result);
+                    }
+                }
                 
                 // Subscribe to new file's events
                 if (_selectedFile != null)
@@ -111,8 +125,7 @@ namespace TID3
                 // Update button state after initialization is complete
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    UpdateApplyButtonState();
-                }));
+                        }));
             }
         }
 
@@ -130,11 +143,14 @@ namespace TID3
             _musicBrainzService = new MusicBrainzService();
             _discogsService = new DiscogsService();
             _updateService = new UpdateService();
+            _cacheManager = new OnlineSourceCacheManager();
             _audioFiles = new ObservableCollection<AudioFileInfo>();
             _onlineSourceItems = new ObservableCollection<OnlineSourceItem>();
+            _hierarchicalItems = new ObservableCollection<AlbumGroup>();
 
             // Subscribe to collection changes to update UI
             InitializeOnlineSourceDropdown();
+            _audioFiles.CollectionChanged += AudioFiles_CollectionChanged;
             _audioFiles.CollectionChanged += (sender, e) =>
             {
                 OnPropertyChanged(nameof(AudioFiles));
@@ -484,18 +500,82 @@ namespace TID3
                     await Task.Delay(1);
                 }
 
+                // Refresh folder-based cover art for all loaded files
+                Title = "TID3 - Scanning for cover art files...";
+                await Task.Run(() => {
+                    _tagService.RefreshFolderCoverArt(_audioFiles);
+                });
+
                 // Reset title and show completion status
                 Title = "TID3 - Advanced ID3 Tag Editor";
                 var avgTimePerFile = totalFiles > 0 ? stopwatch.ElapsedMilliseconds / (double)totalFiles : 0;
                 var threadsNote = maxDegreeOfParallelism > 1 ? $"{maxDegreeOfParallelism} threads" : "1 thread";
                 var performanceNote = avgTimePerFile < 50 ? "Fast" : avgTimePerFile < 200 ? "Good" : "Slow";
-                UpdateStatus($"Loaded {successfulCount}/{totalFiles} files in {stopwatch.ElapsedMilliseconds}ms ({performanceNote}: {avgTimePerFile:F0}ms/file, {threadsNote}).");
+                
+                // Count files with cover art
+                var filesWithCoverArt = _audioFiles.Count(f => f.AlbumCover != null);
+                var coverArtNote = filesWithCoverArt > 0 ? $", {filesWithCoverArt} with cover art" : "";
+                
+                UpdateStatus($"Loaded {successfulCount}/{totalFiles} files in {stopwatch.ElapsedMilliseconds}ms ({performanceNote}: {avgTimePerFile:F0}ms/file, {threadsNote}){coverArtNote}.");
             }
             catch (Exception ex)
             {
                 // Reset title on error
                 Title = "TID3 - Advanced ID3 Tag Editor";
                 MessageBox.Show($"Error loading files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void RefreshCoverArt_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_audioFiles.Any())
+            {
+                MessageBox.Show("No files loaded. Please load some audio files first.", "No Files", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            try
+            {
+                // Show progress
+                Title = "TID3 - Scanning for cover art files...";
+                UpdateStatus("Scanning folders for cover art files...");
+
+                // Count files before refresh
+                var beforeCount = _audioFiles.Count(f => f.AlbumCover != null);
+
+                await Task.Run(() => {
+                    _tagService.RefreshFolderCoverArt(_audioFiles);
+                });
+
+                // Count files after refresh
+                var afterCount = _audioFiles.Count(f => f.AlbumCover != null);
+                var newCoverArts = afterCount - beforeCount;
+
+                // Reset title
+                Title = "TID3 - Advanced ID3 Tag Editor";
+
+                // Update status with results
+                string message;
+                if (newCoverArts > 0)
+                {
+                    message = $"Cover art refresh completed. Found {newCoverArts} new cover art files. Total: {afterCount} files with cover art.";
+                    UpdateStatus(message);
+                    MessageBox.Show($"Found {newCoverArts} new cover art files!", "Cover Art Found", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    message = $"Cover art refresh completed. No new cover art files found. Total: {afterCount} files with cover art.";
+                    UpdateStatus(message);
+                    MessageBox.Show("No new cover art files found in the loaded folders.", "Refresh Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+
+                // Refresh batch cover display if needed
+                UpdateBatchAlbumCover();
+            }
+            catch (Exception ex)
+            {
+                Title = "TID3 - Advanced ID3 Tag Editor";
+                MessageBox.Show($"Error refreshing cover art: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -509,10 +589,17 @@ namespace TID3
 
             try
             {
-                if (_tagService.SaveFile(SelectedFile))
+                var (success, coverArtSaved) = _tagService.SaveFile(SelectedFile);
+                if (success)
                 {
+                    string message = "File saved successfully!";
+                    if (coverArtSaved)
+                    {
+                        message += $"\nCover art also saved to album folder.";
+                    }
+                    
                     UpdateStatus($"Successfully saved: {SelectedFile.FileName}");
-                    MessageBox.Show("File saved successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(message, "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 else
                 {
@@ -542,18 +629,27 @@ namespace TID3
 
             try
             {
-                int saved = await Task.Run(() =>
+                var (saved, coverArtsSaved) = await Task.Run(() =>
                 {
-                    int count = 0;
+                    int savedCount = 0;
+                    int coverArtCount = 0;
+                    
                     foreach (var file in _audioFiles)
                     {
-                        if (_tagService.SaveFile(file))
-                            count++;
+                        var (success, coverArtSaved) = _tagService.SaveFile(file);
+                        if (success) savedCount++;
+                        if (coverArtSaved) coverArtCount++;
                     }
-                    return count;
+                    return (savedCount, coverArtCount);
                 });
 
-                UpdateStatus($"Saved {saved} of {_audioFiles.Count} files successfully.");
+                string statusMessage = $"Saved {saved} of {_audioFiles.Count} files successfully.";
+                if (coverArtsSaved > 0)
+                {
+                    statusMessage += $" {coverArtsSaved} cover arts saved to folders.";
+                }
+                
+                UpdateStatus(statusMessage);
                 MessageBox.Show($"Saved {saved} of {_audioFiles.Count} files.", "Save Complete", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -567,15 +663,524 @@ namespace TID3
 
         #region Batch Operations
 
-        private void BatchEdit_Click(object sender, RoutedEventArgs e)
+        private void MainDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (!_audioFiles.Any())
+            UpdateEditorPanelVisibility();
+        }
+
+        private void MainTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (e.NewValue is AudioFileInfo audioFile)
             {
-                MessageBox.Show("Please load some audio files first.", "No Files", MessageBoxButton.OK, MessageBoxImage.Warning);
+                SelectedFile = audioFile;
+            }
+            else if (e.NewValue is AlbumGroup albumGroup)
+            {
+                // When selecting an album group, select the first track if available
+                SelectedFile = albumGroup.Tracks.FirstOrDefault();
+            }
+            
+            UpdateEditorPanelVisibility();
+            
+            // Update match scores for the new selection if there's an online source selected
+            if (OnlineSourceComboBox.SelectedItem != null)
+            {
+                UpdateMatchScores();
+            }
+        }
+
+        private void MainTreeView_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Delete)
+            {
+                RemoveSelectedItems();
+                e.Handled = true;
+            }
+        }
+
+        private void AudioFiles_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            RebuildHierarchicalStructure();
+        }
+
+        private void RebuildHierarchicalStructure()
+        {
+            var albumGroups = _audioFiles
+                .GroupBy(file => file.Album ?? "Unknown Album")
+                .Select(group => new AlbumGroup
+                {
+                    Album = group.Key,
+                    Artist = group.FirstOrDefault()?.AlbumArtist ?? group.FirstOrDefault()?.Artist ?? "Unknown Artist",
+                    Year = group.Max(f => f.Year),
+                    Genre = group.FirstOrDefault()?.Genre ?? "",
+                    Tracks = new ObservableCollection<AudioFileInfo>(group.OrderBy(f => f.Track))
+                })
+                .OrderBy(g => g.Artist)
+                .ThenBy(g => g.Year)
+                .ThenBy(g => g.Album);
+
+            _hierarchicalItems.Clear();
+            foreach (var albumGroup in albumGroups)
+            {
+                _hierarchicalItems.Add(albumGroup);
+            }
+
+            OnPropertyChanged(nameof(HierarchicalItems));
+        }
+
+        private void MainDataGrid_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Delete)
+            {
+                RemoveSelectedFiles();
+                e.Handled = true;
+            }
+        }
+
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+        {
+            // Handle Delete key if TreeView has focus
+            if (e.Key == Key.Delete && MainTreeView.SelectedItem != null)
+            {
+                // Check if the focused element is the TreeView or one of its children
+                var focusedElement = Keyboard.FocusedElement as DependencyObject;
+                bool isTreeViewFocused = focusedElement != null && IsChildOfTreeView(focusedElement);
+                
+                // Also check if TreeView itself is focused or has keyboard focus within
+                bool hasKeyboardFocusWithin = MainTreeView.IsKeyboardFocusWithin;
+                
+                if (isTreeViewFocused || hasKeyboardFocusWithin)
+                {
+                    RemoveSelectedItems();
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private bool IsChildOfTreeView(DependencyObject element)
+        {
+            while (element != null)
+            {
+                if (element == MainTreeView)
+                    return true;
+                element = VisualTreeHelper.GetParent(element) ?? LogicalTreeHelper.GetParent(element);
+            }
+            return false;
+        }
+
+        private void RemoveSelectedItems()
+        {
+            var selectedItem = MainTreeView.SelectedItem;
+            
+            if (selectedItem is AudioFileInfo audioFile)
+            {
+                // Remove single track
+                _audioFiles.Remove(audioFile);
+                // Clear cache for this file
+                _cacheManager.ClearResultsForFile(audioFile.FilePath);
+            }
+            else if (selectedItem is AlbumGroup albumGroup)
+            {
+                // Remove entire album
+                var tracksToRemove = albumGroup.Tracks.ToList();
+                foreach (var track in tracksToRemove)
+                {
+                    _audioFiles.Remove(track);
+                    // Clear cache for each track
+                    _cacheManager.ClearResultsForFile(track.FilePath);
+                }
+            }
+            
+            // Clear current UI display if the removed file was selected
+            if (selectedItem is AudioFileInfo removedFile && SelectedFile?.FilePath == removedFile.FilePath)
+            {
+                _onlineSourceItems.Clear();
+            }
+            
+            // Update UI
+            OnPropertyChanged(nameof(AudioFiles));
+            UpdateEditorPanelVisibility();
+        }
+
+        private void RemoveSelectedFiles()
+        {
+            // This method is kept for backward compatibility but delegates to RemoveSelectedItems
+            RemoveSelectedItems();
+        }
+
+        private void UpdateEditorPanelVisibility()
+        {
+            var selectedItem = MainTreeView?.SelectedItem;
+            
+            if (selectedItem == null)
+            {
+                // No selection
+                EditorHeaderText.Text = "Tag Editor";
+                SelectionInfoText.Text = "Select files to edit tags";
+                SingleEditPanel.Visibility = Visibility.Collapsed;
+                BatchEditPanel.Visibility = Visibility.Collapsed;
+                ClearBatchAlbumCover();
+            }
+            else if (selectedItem is AudioFileInfo)
+            {
+                // Single file selected
+                EditorHeaderText.Text = "Tag Editor";
+                SelectionInfoText.Text = "Editing single file";
+                SingleEditPanel.Visibility = Visibility.Visible;
+                BatchEditPanel.Visibility = Visibility.Collapsed;
+                ClearBatchAlbumCover();
+            }
+            else if (selectedItem is AlbumGroup albumGroup)
+            {
+                // Album group selected - show batch editing for all tracks in album
+                var trackCount = albumGroup.Tracks.Count;
+                EditorHeaderText.Text = $"Album Edit ({trackCount} tracks)";
+                SelectionInfoText.Text = $"Editing all tracks in '{albumGroup.AlbumInfo}'";
+                SingleEditPanel.Visibility = Visibility.Collapsed;
+                BatchEditPanel.Visibility = Visibility.Visible;
+                
+                // Update batch album cover display
+                UpdateBatchAlbumCover(albumGroup);
+                
+                // Update batch field values
+                UpdateBatchFieldValues(albumGroup.Tracks.ToList());
+            }
+        }
+
+        private void UpdateBatchAlbumCover(AlbumGroup albumGroup)
+        {
+            try
+            {
+                // Check if all tracks in the album have the same cover
+                var albumCovers = albumGroup.Tracks
+                    .Where(track => track.AlbumCover != null)
+                    .Select(track => track.AlbumCover)
+                    .Distinct()
+                    .ToList();
+
+                // Check cover art sources
+                var coverSources = albumGroup.Tracks
+                    .Where(track => !string.IsNullOrEmpty(track.CoverArtSource))
+                    .Select(track => track.CoverArtSource)
+                    .Distinct()
+                    .ToList();
+
+                if (albumCovers.Count == 1)
+                {
+                    // All tracks have the same cover (or only one track has a cover)
+                    BatchAlbumCoverImage.Source = albumCovers.First();
+                    BatchAlbumCoverText.Visibility = Visibility.Collapsed;
+                    
+                    // Show cover art source
+                    if (coverSources.Count == 1)
+                    {
+                        BatchCoverArtSourceText.Text = coverSources.First();
+                        BatchCoverArtSourceText.Visibility = Visibility.Visible;
+                    }
+                    else if (coverSources.Count > 1)
+                    {
+                        BatchCoverArtSourceText.Text = "Multiple sources";
+                        BatchCoverArtSourceText.Visibility = Visibility.Visible;
+                    }
+                    else
+                    {
+                        BatchCoverArtSourceText.Visibility = Visibility.Collapsed;
+                    }
+                }
+                else if (albumCovers.Count > 1)
+                {
+                    // Multiple different covers
+                    BatchAlbumCoverImage.Source = null;
+                    BatchAlbumCoverText.Text = "Multiple Covers";
+                    BatchAlbumCoverText.Visibility = Visibility.Visible;
+                    BatchCoverArtSourceText.Text = "Multiple sources";
+                    BatchCoverArtSourceText.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    // No covers found
+                    BatchAlbumCoverImage.Source = null;
+                    BatchAlbumCoverText.Text = "No Album Cover";
+                    BatchAlbumCoverText.Visibility = Visibility.Visible;
+                    BatchCoverArtSourceText.Visibility = Visibility.Collapsed;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error updating batch album cover: {ex.Message}");
+                BatchAlbumCoverImage.Source = null;
+                BatchAlbumCoverText.Text = "Error Loading Cover";
+                BatchAlbumCoverText.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void ClearBatchAlbumCover()
+        {
+            try
+            {
+                BatchAlbumCoverImage.Source = null;
+                BatchAlbumCoverText.Text = "No Common Cover";
+                BatchAlbumCoverText.Visibility = Visibility.Visible;
+                
+                // Also clear batch field values
+                ClearBatchFieldValues();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error clearing batch album cover: {ex.Message}");
+            }
+        }
+        
+        private void ClearBatchFieldValues()
+        {
+            try
+            {
+                BatchAlbumText.Text = "";
+                BatchAlbumArtistText.Text = "";
+                BatchGenreText.Text = "";
+                BatchYearText.Text = "";
+                
+                BatchAlbumText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                BatchAlbumArtistText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                BatchGenreText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                BatchYearText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                
+                BatchAlbumCheck.IsChecked = false;
+                BatchAlbumArtistCheck.IsChecked = false;
+                BatchGenreCheck.IsChecked = false;
+                BatchYearCheck.IsChecked = false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error clearing batch field values: {ex.Message}");
+            }
+        }
+
+        private void UpdateBatchFieldValues(List<AudioFileInfo> tracks)
+        {
+            try
+            {
+                // Update Album field
+                var albums = tracks.Select(t => t.Album).Distinct().ToList();
+                if (albums.Count == 1)
+                {
+                    BatchAlbumText.Text = albums.First();
+                    BatchAlbumText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+                else if (albums.Count > 1)
+                {
+                    BatchAlbumText.Text = "[Multiple Values]";
+                    BatchAlbumText.Foreground = (System.Windows.Media.Brush)Resources["SubTextBrush"];
+                }
+                else
+                {
+                    BatchAlbumText.Text = "";
+                    BatchAlbumText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+
+                // Update Album Artist field
+                var albumArtists = tracks.Select(t => t.AlbumArtist).Distinct().ToList();
+                if (albumArtists.Count == 1)
+                {
+                    BatchAlbumArtistText.Text = albumArtists.First();
+                    BatchAlbumArtistText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+                else if (albumArtists.Count > 1)
+                {
+                    BatchAlbumArtistText.Text = "[Multiple Values]";
+                    BatchAlbumArtistText.Foreground = (System.Windows.Media.Brush)Resources["SubTextBrush"];
+                }
+                else
+                {
+                    BatchAlbumArtistText.Text = "";
+                    BatchAlbumArtistText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+
+                // Update Genre field
+                var genres = tracks.Select(t => t.Genre).Distinct().ToList();
+                if (genres.Count == 1)
+                {
+                    BatchGenreText.Text = genres.First();
+                    BatchGenreText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+                else if (genres.Count > 1)
+                {
+                    BatchGenreText.Text = "[Multiple Values]";
+                    BatchGenreText.Foreground = (System.Windows.Media.Brush)Resources["SubTextBrush"];
+                }
+                else
+                {
+                    BatchGenreText.Text = "";
+                    BatchGenreText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+
+                // Update Year field
+                var years = tracks.Select(t => t.Year).Where(y => y > 0).Distinct().ToList();
+                if (years.Count == 1)
+                {
+                    BatchYearText.Text = years.First().ToString();
+                    BatchYearText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+                else if (years.Count > 1)
+                {
+                    BatchYearText.Text = "[Multiple Values]";
+                    BatchYearText.Foreground = (System.Windows.Media.Brush)Resources["SubTextBrush"];
+                }
+                else
+                {
+                    BatchYearText.Text = "";
+                    BatchYearText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+
+                // Reset checkboxes to unchecked by default
+                BatchAlbumCheck.IsChecked = false;
+                BatchAlbumArtistCheck.IsChecked = false;
+                BatchGenreCheck.IsChecked = false;
+                BatchYearCheck.IsChecked = false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error updating batch field values: {ex.Message}");
+            }
+        }
+
+        private void ApplyBatchEdit_Click(object sender, RoutedEventArgs e)
+        {
+            var selectedItem = MainTreeView.SelectedItem;
+            List<AudioFileInfo> selectedFiles = new List<AudioFileInfo>();
+
+            if (selectedItem is AudioFileInfo audioFile)
+            {
+                selectedFiles.Add(audioFile);
+            }
+            else if (selectedItem is AlbumGroup albumGroup)
+            {
+                selectedFiles.AddRange(albumGroup.Tracks);
+            }
+
+            if (!selectedFiles.Any())
+            {
+                MessageBox.Show("Please select at least one file to update.", "No Selection", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            MessageBox.Show($"Batch editing for {_audioFiles.Count} files will be implemented here.", "Batch Edit", MessageBoxButton.OK, MessageBoxImage.Information);
+            var changes = GetBatchChanges();
+            if (!changes.Any())
+            {
+                MessageBox.Show("Please select at least one field to update.", "No Changes", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var result = MessageBox.Show($"Are you sure you want to update {selectedFiles.Count} files?",
+                                       "Confirm Batch Update",
+                                       MessageBoxButton.YesNo,
+                                       MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                try
+                {
+                    ApplyBatchChanges(selectedFiles, changes);
+                    MessageBox.Show($"Successfully updated {selectedFiles.Count} files!");
+                    
+                    // Refresh data binding
+                    OnPropertyChanged(nameof(AudioFiles));
+                    OnPropertyChanged(nameof(SelectedFile));
+
+                    // Clear batch edit fields
+                    ClearBatchEditFields();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Error updating files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private Dictionary<string, object> GetBatchChanges()
+        {
+            var changes = new Dictionary<string, object>();
+
+            if (BatchAlbumCheck.IsChecked == true && !string.IsNullOrWhiteSpace(BatchAlbumText.Text))
+                changes["Album"] = BatchAlbumText.Text.Trim();
+
+            if (BatchAlbumArtistCheck.IsChecked == true && !string.IsNullOrWhiteSpace(BatchAlbumArtistText.Text))
+                changes["AlbumArtist"] = BatchAlbumArtistText.Text.Trim();
+
+            if (BatchGenreCheck.IsChecked == true && !string.IsNullOrWhiteSpace(BatchGenreText.Text))
+                changes["Genre"] = BatchGenreText.Text.Trim();
+
+            if (BatchYearCheck.IsChecked == true && !string.IsNullOrWhiteSpace(BatchYearText.Text))
+            {
+                if (uint.TryParse(BatchYearText.Text.Trim(), out uint year))
+                    changes["Year"] = year;
+            }
+
+            if (BatchAutoNumberCheck.IsChecked == true)
+                changes["AutoNumberTracks"] = true;
+
+            if (BatchCleanupCheck.IsChecked == true)
+                changes["CleanupTags"] = true;
+
+            return changes;
+        }
+
+        private void ApplyBatchChanges(List<AudioFileInfo> files, Dictionary<string, object> changes)
+        {
+            for (int i = 0; i < files.Count; i++)
+            {
+                var file = files[i];
+
+                // Apply basic field changes
+                if (changes.ContainsKey("Album"))
+                    file.Album = changes["Album"]?.ToString() ?? "";
+
+                if (changes.ContainsKey("AlbumArtist"))
+                    file.AlbumArtist = changes["AlbumArtist"]?.ToString() ?? "";
+
+                if (changes.ContainsKey("Genre"))
+                    file.Genre = changes["Genre"]?.ToString() ?? "";
+
+                if (changes.ContainsKey("Year"))
+                    file.Year = (uint)changes["Year"];
+
+                // Auto-number tracks
+                if (changes.ContainsKey("AutoNumberTracks"))
+                    file.Track = (uint)(i + 1);
+
+                // Cleanup empty tags
+                if (changes.ContainsKey("CleanupTags"))
+                {
+                    if (string.IsNullOrWhiteSpace(file.Title)) file.Title = "";
+                    if (string.IsNullOrWhiteSpace(file.Artist)) file.Artist = "";
+                    if (string.IsNullOrWhiteSpace(file.Album)) file.Album = "";
+                    if (string.IsNullOrWhiteSpace(file.Genre)) file.Genre = "";
+                    if (string.IsNullOrWhiteSpace(file.AlbumArtist)) file.AlbumArtist = "";
+                    if (string.IsNullOrWhiteSpace(file.Comment)) file.Comment = "";
+                }
+
+                // Save the file
+                var (success, coverArtSaved) = _tagService.SaveFile(file);
+                if (coverArtSaved)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Cover art saved to album folder for batch edit: {file.FileName}");
+                }
+            }
+        }
+
+        private void ClearBatchEditFields()
+        {
+            BatchAlbumCheck.IsChecked = false;
+            BatchAlbumArtistCheck.IsChecked = false;
+            BatchGenreCheck.IsChecked = false;
+            BatchYearCheck.IsChecked = false;
+            BatchAutoNumberCheck.IsChecked = false;
+            BatchCleanupCheck.IsChecked = false;
+
+            BatchAlbumText.Text = "";
+            BatchAlbumArtistText.Text = "";
+            BatchGenreText.Text = "";
+            BatchYearText.Text = "";
         }
 
         #endregion
@@ -649,6 +1254,10 @@ namespace TID3
                 _audioFiles.Clear();
                 SelectedFile = null!;
                 
+                // Clear all cached online source results
+                _cacheManager.ClearAllResults();
+                _onlineSourceItems.Clear();
+                
                 UpdateStatus("File list cleared.");
             }
         }
@@ -689,17 +1298,11 @@ namespace TID3
             UpdateComparisonDisplay();
         }
 
-        private void ShowEmptyFields_Changed(object sender, RoutedEventArgs e)
-        {
-            UpdateComparisonDisplay();
-        }
-
         private void UpdateComparisonDisplay()
         {
             if (SelectedFile?.TagComparison == null) return;
 
             var mode = (ComparisonMode)ComparisonModeComboBox.SelectedIndex;
-            var showEmpty = ShowEmptyFieldsCheckBox.IsChecked ?? false;
 
             var filteredComparison = SelectedFile.TagComparison.AsEnumerable();
 
@@ -713,11 +1316,7 @@ namespace TID3
                     break;
             }
 
-            if (!showEmpty)
-            {
-                filteredComparison = filteredComparison.Where(c =>
-                    !string.IsNullOrWhiteSpace(c.OriginalValue) || !string.IsNullOrWhiteSpace(c.NewValue));
-            }
+            // Always show empty fields - removed the showEmpty filter
 
             TagComparisonDataGrid.ItemsSource = filteredComparison.ToList();
         }
@@ -825,6 +1424,23 @@ namespace TID3
 
         #endregion
 
+        private List<AudioFileInfo> GetSelectedFiles()
+        {
+            var selectedItem = MainTreeView.SelectedItem;
+            var selectedFiles = new List<AudioFileInfo>();
+
+            if (selectedItem is AudioFileInfo audioFile)
+            {
+                selectedFiles.Add(audioFile);
+            }
+            else if (selectedItem is AlbumGroup albumGroup)
+            {
+                selectedFiles.AddRange(albumGroup.Tracks);
+            }
+
+            return selectedFiles;
+        }
+
         #region Online Source Management
 
         private void InitializeOnlineSourceDropdown()
@@ -832,58 +1448,158 @@ namespace TID3
             OnlineSourceComboBox.ItemsSource = _onlineSourceItems;
         }
 
+        private void UpdateCoverArtFromOnlineSource(OnlineSourceItem selectedSource, AudioFileInfo targetFile)
+        {
+            try
+            {
+                System.Windows.Media.Imaging.BitmapImage? coverImage = null;
+                string coverSource = "";
+
+                if (selectedSource.SourceType == "MusicBrainz" && selectedSource.Source is MusicBrainzRelease mbRelease)
+                {
+                    coverImage = mbRelease.CoverArtImage;
+                    coverSource = "MusicBrainz Cover Art Archive";
+                }
+                else if (selectedSource.SourceType == "Discogs" && selectedSource.Source is DiscogsRelease discogsRelease)
+                {
+                    coverImage = discogsRelease.CoverArtImage;
+                    coverSource = "Discogs";
+                }
+
+                if (coverImage != null)
+                {
+                    // Update the target file with the new cover art
+                    targetFile.AlbumCover = coverImage;
+                    targetFile.CoverArtSource = coverSource;
+                    
+                    System.Diagnostics.Debug.WriteLine($"Cover art loaded from {coverSource} for {targetFile.FileName}");
+                    
+                    // Update batch editor if multiple files are selected
+                    UpdateBatchAlbumCover();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error updating cover art: {ex.Message}");
+            }
+        }
+
+        private void UpdateBatchAlbumCover()
+        {
+            // Update batch cover for currently selected files
+            var selectedFiles = GetSelectedFiles();
+            if (selectedFiles.Count > 1)
+            {
+                // Create a temporary album group for the selected files
+                var tempGroup = new AlbumGroup();
+                foreach (var file in selectedFiles)
+                {
+                    tempGroup.Tracks.Add(file);
+                }
+                UpdateBatchAlbumCover(tempGroup);
+            }
+        }
+
         private async void SearchMusicBrainz_Click(object sender, RoutedEventArgs e)
         {
-            if (SelectedFile == null) return;
+            var selectedFiles = GetSelectedFiles();
+            if (!selectedFiles.Any()) return;
+
+            // Clear existing MusicBrainz results
+            ClearOnlineSourceResults("MusicBrainz");
+            
+            // Clear match scores from previous searches
+            ClearAllMatchScores();
 
             try
             {
-                var query = $"{SelectedFile.Artist} {SelectedFile.Album}".Trim();
-                if (string.IsNullOrEmpty(query))
-                {
-                    MessageBox.Show("Please ensure the selected file has artist or album information.", "Search Requirements", MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
-                }
+                var originalCursor = Cursor;
+                Cursor = System.Windows.Input.Cursors.Wait;
 
-                var results = await _musicBrainzService.SearchReleases(query);
-                
-                // Clear existing MusicBrainz results and add new ones
-                var existingMB = _onlineSourceItems.Where(x => x.SourceType == "MusicBrainz").ToList();
-                foreach (var item in existingMB)
-                {
-                    _onlineSourceItems.Remove(item);
-                }
+                var totalFiles = selectedFiles.Count;
+                var processedCount = 0;
+                var successfulSearches = 0;
 
-                // Score and sort results by relevance to current file
-                var scoredResults = results.Take(10) // Get more results for better matching
-                    .Select(release => new { 
-                        Release = release, 
-                        Score = CalculateMatchScore(SelectedFile, release) 
-                    })
-                    .OrderByDescending(x => x.Score)
-                    .Take(5) // Then take top 5 after scoring
-                    .ToList();
+                UpdateStatus($"Searching MusicBrainz for {totalFiles} files...");
 
-                foreach (var scoredResult in scoredResults)
+                try
                 {
-                    var displayName = $"MusicBrainz: {scoredResult.Release.Artist} - {scoredResult.Release.Title} ({scoredResult.Release.Date})";
-                    if (scoredResult.Release.TrackCount > 0)
-                        displayName += $" [{scoredResult.Release.TrackCount} tracks]";
-                    if (scoredResult.Score > 0)
-                        displayName += $" [Match: {scoredResult.Score:F1}]";
-                        
-                    _onlineSourceItems.Add(new OnlineSourceItem
+                    foreach (var file in selectedFiles)
                     {
-                        DisplayName = displayName,
-                        Source = scoredResult.Release,
-                        SourceType = "MusicBrainz"
-                    });
+                        processedCount++;
+                        UpdateStatus($"MusicBrainz search: {processedCount}/{totalFiles} - {file.FileName}");
+
+                        var query = $"{file.Artist} {file.Album}".Trim();
+                        if (!string.IsNullOrEmpty(query))
+                        {
+                            var results = await _musicBrainzService.SearchReleases(query);
+                            
+                            if (results.Any())
+                            {
+                                // Score and sort results by relevance to current file
+                                var scoredResults = results.Take(5)
+                                    .Select(release => new { 
+                                        Release = release, 
+                                        Score = CalculateMatchScore(file, release),
+                                        File = file
+                                    })
+                                    .OrderByDescending(x => x.Score)
+                                    .Take(3) // Top 3 results per file
+                                    .ToList();
+
+                                foreach (var scoredResult in scoredResults)
+                                {
+                                    var displayName = $"MB: {scoredResult.Release.Artist} - {scoredResult.Release.Title} ({scoredResult.Release.Date})";
+                                    if (scoredResult.Release.TrackCount > 0)
+                                        displayName += $" [{scoredResult.Release.TrackCount}T]";
+                                    displayName += $" [For: {scoredResult.File.FileName}]";
+                                    if (scoredResult.Score > 0)
+                                        displayName += $" [{scoredResult.Score * 100:F1}%]";
+                                        
+                                    AddOnlineSourceResult(new OnlineSourceItem
+                                    {
+                                        DisplayName = displayName,
+                                        Source = scoredResult.Release,
+                                        SourceType = "MusicBrainz",
+                                        Data = scoredResult.File // Store which file this result is for
+                                    }, scoredResult.File);
+                                    
+                                    // Load cover art asynchronously
+                                    _ = Task.Run(async () =>
+                                    {
+                                        try
+                                        {
+                                            var coverUrl = await _musicBrainzService.GetCoverArtUrl(scoredResult.Release.Id);
+                                            if (!string.IsNullOrEmpty(coverUrl))
+                                            {
+                                                scoredResult.Release.CoverArtUrl = coverUrl;
+                                                scoredResult.Release.CoverArtImage = await _musicBrainzService.LoadCoverArtImage(coverUrl);
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            System.Diagnostics.Debug.WriteLine($"Error loading MusicBrainz cover art: {ex.Message}");
+                                        }
+                                    });
+                                }
+
+                                successfulSearches++;
+                            }
+                        }
+
+                        // MusicBrainz rate limiting: 1 request per second
+                        if (processedCount < totalFiles)
+                        {
+                            await Task.Delay(1100); // Wait 1.1 seconds between requests
+                        }
+                    }
+
+                    UpdateStatus($"MusicBrainz search completed: {successfulSearches}/{totalFiles} files found results");
+                        }
+                finally
+                {
+                    Cursor = originalCursor;
                 }
-
-                // Auto-select the best overall match across all sources
-                SelectBestOverallMatch();
-
-                UpdateApplyButtonState();
             }
             catch (Exception ex)
             {
@@ -891,9 +1607,48 @@ namespace TID3
             }
         }
 
+        private void AddOnlineSourceResult(OnlineSourceItem result, AudioFileInfo targetFile)
+        {
+            _onlineSourceItems.Add(result);
+            
+            // Update cache for the target file
+            var currentResults = _cacheManager.GetResults(targetFile.FilePath);
+            currentResults.Add(result);
+            _cacheManager.StoreResults(targetFile.FilePath, currentResults);
+        }
+
+        private void ClearOnlineSourceResults(string sourceType, AudioFileInfo? specificFile = null)
+        {
+            // Remove from UI
+            var existingItems = _onlineSourceItems.Where(x => x.SourceType == sourceType).ToList();
+            foreach (var item in existingItems)
+            {
+                _onlineSourceItems.Remove(item);
+            }
+            
+            // Update cache for all affected files
+            if (specificFile != null)
+            {
+                var currentResults = _cacheManager.GetResults(specificFile.FilePath);
+                var filteredResults = currentResults.Where(x => x.SourceType != sourceType).ToList();
+                _cacheManager.StoreResults(specificFile.FilePath, filteredResults);
+            }
+            else
+            {
+                // Clear from all files in cache
+                foreach (var filePath in _cacheManager.GetCachedFilePaths().ToList())
+                {
+                    var currentResults = _cacheManager.GetResults(filePath);
+                    var filteredResults = currentResults.Where(x => x.SourceType != sourceType).ToList();
+                    _cacheManager.StoreResults(filePath, filteredResults);
+                }
+            }
+        }
+
         private async void FingerprintIdentify_Click(object sender, RoutedEventArgs e)
         {
-            if (SelectedFile == null) return;
+            var selectedFiles = GetSelectedFiles();
+            if (!selectedFiles.Any()) return;
 
             var settings = SettingsManager.LoadSettings();
             if (!settings.HasValidAcoustIdCredentials())
@@ -911,86 +1666,88 @@ namespace TID3
                 return;
             }
 
+            // Clear existing fingerprint results
+            ClearOnlineSourceResults("Fingerprint");
+            
+            // Clear match scores from previous searches
+            ClearAllMatchScores();
+
             try
             {
-                // Show progress indication in status bar or similar
                 var originalCursor = Cursor;
                 Cursor = System.Windows.Input.Cursors.Wait;
+
+                var totalFiles = selectedFiles.Count;
+                var processedCount = 0;
+                var successfulIdentifications = 0;
+
+                UpdateStatus($"Fingerprinting {totalFiles} files...");
 
                 try
                 {
                     var acoustIdService = new AcoustIdService(settings.AcoustIdApiKey);
-                    var results = await acoustIdService.IdentifyByFingerprintAsync(SelectedFile.FilePath);
 
-                    if (results.Any())
+                    foreach (var file in selectedFiles)
                     {
-                        // Clear existing fingerprint results
-                        var existingFingerprint = _onlineSourceItems.Where(x => x.SourceType == "Fingerprint").ToList();
-                        foreach (var item in existingFingerprint)
-                        {
-                            _onlineSourceItems.Remove(item);
-                        }
+                        processedCount++;
+                        UpdateStatus($"Fingerprinting: {processedCount}/{totalFiles} - {file.FileName}");
 
-                        // Add new fingerprint results
-                        foreach (var result in results.Take(5))
+                        var results = await acoustIdService.IdentifyByFingerprintAsync(file.FilePath);
+
+                        if (results.Any())
                         {
-                            var title = result.Title ?? "Unknown Title";
-                            var artist = result.Artist ?? "Unknown Artist";
-                            var album = result.Album ?? "Unknown Album";
-                            var score = (result.Score * 100).ToString("F1");
-                            
-                            var displayName = $"[Fingerprint {score}%] {artist} - {title}";
-                            if (!string.IsNullOrEmpty(album) && album != "Unknown Album")
-                                displayName += $" ({album})";
-                                
-                            _onlineSourceItems.Add(new OnlineSourceItem
+                            // Add fingerprint results for this file
+                            foreach (var result in results.Take(2)) // Top 2 results per file
                             {
-                                DisplayName = displayName,
-                                Source = result,
-                                SourceType = "Fingerprint",
-                                Title = title,
-                                Artist = artist,
-                                Album = album,
-                                Score = score + "%",
-                                AdditionalInfo = $"Duration: {result.Duration}s" + 
-                                    (result.MusicBrainzId != null ? $", MB ID: {result.MusicBrainzId[..Math.Min(8, result.MusicBrainzId.Length)]}..." : ""),
-                                Data = result
-                            });
+                                var title = result.Title ?? "Unknown Title";
+                                var artist = result.Artist ?? "Unknown Artist";
+                                var album = result.Album ?? "Unknown Album";
+                                var score = (result.Score * 100).ToString("F1");
+                                
+                                var displayName = $"FP: {artist} - {title} ({score}%)";
+                                if (!string.IsNullOrEmpty(album) && album != "Unknown Album")
+                                    displayName += $" [{album}]";
+                                displayName += $" [For: {file.FileName}]";
+                                    
+                                AddOnlineSourceResult(new OnlineSourceItem
+                                {
+                                    DisplayName = displayName,
+                                    Source = result,
+                                    SourceType = "Fingerprint",
+                                    Title = title,
+                                    Artist = artist,
+                                    Album = album,
+                                    Score = score + "%",
+                                    AdditionalInfo = $"Duration: {result.Duration}s",
+                                    Data = file // Store which file this result is for
+                                }, file);
+                            }
+
+                            // Auto-apply best result to the file's comparison
+                            var bestResult = results.OrderByDescending(r => r.Score).First();
+                            var newTags = TagSnapshot.FromAcoustIdResult(bestResult, file);
+                            file.UpdateComparison(newTags, $"Fingerprint: {bestResult.Score * 100:F1}% match");
+
+                            successfulIdentifications++;
                         }
 
-                        // Automatically apply the first (best) fingerprint result
-                        var bestResult = results.OrderByDescending(r => r.Score).First();
-                        var newTags = TagSnapshot.FromAcoustIdResult(bestResult, SelectedFile);
-                        
-                        // Apply the comparison using the existing tag comparison system
-                        SelectedFile.UpdateComparison(newTags, $"Fingerprint: {bestResult.Score * 100:F1}% match");
-                        
-                        // Select the best result in the dropdown if it exists
-                        var bestResultItem = _onlineSourceItems.FirstOrDefault(item => 
-                            item.SourceType == "Fingerprint" && 
-                            item.Data is AcoustIdResult result && 
-                            Math.Abs(result.Score - bestResult.Score) < 0.0001);
-                        
-                        if (bestResultItem != null)
+                        // Small delay to be respectful to the API
+                        if (processedCount < totalFiles)
                         {
-                            OnlineSourceComboBox.SelectedItem = bestResultItem;
+                            await Task.Delay(500); // 500ms delay between fingerprint requests
                         }
-                        
-                        // Update apply button state
-                        UpdateApplyButtonState();
-                        
-                        // Refresh the tag comparison display
-                        UpdateComparisonDisplay();
-                        
-                        // Switch to comparison tab to show results
-                        InfoTabControl.SelectedIndex = 1; // Tag Comparison tab
-                        
                     }
-                    else
+
+                    UpdateStatus($"Fingerprinting completed: {successfulIdentifications}/{totalFiles} files identified");
+                    
+                    // Switch to comparison tab if any results found
+                    if (successfulIdentifications > 0)
                     {
-                        MessageBox.Show("No matches found through audio fingerprinting.", "No Results", MessageBoxButton.OK, MessageBoxImage.Information);
+                        InfoTabControl.SelectedIndex = 1; // Tag Comparison tab
+                        UpdateComparisonDisplay();
                     }
-                }
+                    
+                        }
                 finally
                 {
                     Cursor = originalCursor;
@@ -998,79 +1755,108 @@ namespace TID3
             }
             catch (Exception ex)
             {
-                // Show detailed error information for debugging
-                var errorDetails = $"Error Type: {ex.GetType().Name}\n" +
-                                 $"Message: {ex.Message}\n";
-                
-                if (ex.InnerException != null)
-                {
-                    errorDetails += $"\nInner Exception: {ex.InnerException.GetType().Name}\n" +
-                                  $"Inner Message: {ex.InnerException.Message}";
-                }
-                
-                if (ex is System.ComponentModel.Win32Exception win32Ex)
-                {
-                    errorDetails += $"\nWin32 Error Code: {win32Ex.ErrorCode} (0x{win32Ex.ErrorCode:X})";
-                }
-                
-                errorDetails += $"\nStack Trace: {ex.StackTrace}";
-                
-                MessageBox.Show(errorDetails, "Detailed Fingerprint Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Error during fingerprinting: {ex.Message}", "Fingerprint Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         private async void SearchDiscogs_Click(object sender, RoutedEventArgs e)
         {
-            if (SelectedFile == null) return;
+            var selectedFiles = GetSelectedFiles();
+            if (!selectedFiles.Any()) return;
+
+            // Clear existing Discogs results
+            ClearOnlineSourceResults("Discogs");
+            
+            // Clear match scores from previous searches
+            ClearAllMatchScores();
 
             try
             {
-                var query = $"{SelectedFile.Artist} {SelectedFile.Album}".Trim();
-                if (string.IsNullOrEmpty(query))
-                {
-                    MessageBox.Show("Please ensure the selected file has artist or album information.", "Search Requirements", MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
-                }
+                var originalCursor = Cursor;
+                Cursor = System.Windows.Input.Cursors.Wait;
 
-                var results = await _discogsService.SearchReleases(query);
-                
-                // Clear existing Discogs results and add new ones
-                var existingDiscogs = _onlineSourceItems.Where(x => x.SourceType == "Discogs").ToList();
-                foreach (var item in existingDiscogs)
-                {
-                    _onlineSourceItems.Remove(item);
-                }
+                var totalFiles = selectedFiles.Count;
+                var processedCount = 0;
+                var successfulSearches = 0;
 
-                // Score and sort results by relevance to current file
-                var scoredResults = results.Take(10) // Get more results for better matching
-                    .Select(release => new { 
-                        Release = release, 
-                        Score = CalculateMatchScore(SelectedFile, release) 
-                    })
-                    .OrderByDescending(x => x.Score)
-                    .Take(5) // Then take top 5 after scoring
-                    .ToList();
+                UpdateStatus($"Searching Discogs for {totalFiles} files...");
 
-                foreach (var scoredResult in scoredResults)
+                try
                 {
-                    var displayName = $"Discogs: {scoredResult.Release.Artist} - {scoredResult.Release.Title} ({scoredResult.Release.Year})";
-                    if (scoredResult.Release.TrackCount > 0)
-                        displayName += $" [{scoredResult.Release.TrackCount} tracks]";
-                    if (scoredResult.Score > 0)
-                        displayName += $" [Match: {scoredResult.Score:F1}]";
-                        
-                    _onlineSourceItems.Add(new OnlineSourceItem
+                    foreach (var file in selectedFiles)
                     {
-                        DisplayName = displayName,
-                        Source = scoredResult.Release,
-                        SourceType = "Discogs"
-                    });
+                        processedCount++;
+                        UpdateStatus($"Discogs search: {processedCount}/{totalFiles} - {file.FileName}");
+
+                        var query = $"{file.Artist} {file.Album}".Trim();
+                        if (!string.IsNullOrEmpty(query))
+                        {
+                            var results = await _discogsService.SearchReleases(query);
+                            
+                            if (results.Any())
+                            {
+                                // Score and sort results by relevance to current file
+                                var scoredResults = results.Take(5)
+                                    .Select(release => new { 
+                                        Release = release, 
+                                        Score = CalculateMatchScore(file, release),
+                                        File = file
+                                    })
+                                    .OrderByDescending(x => x.Score)
+                                    .Take(3) // Top 3 results per file
+                                    .ToList();
+
+                                foreach (var scoredResult in scoredResults)
+                                {
+                                    var displayName = $"DC: {scoredResult.Release.Artist} - {scoredResult.Release.Title} ({scoredResult.Release.Year})";
+                                    if (scoredResult.Release.TrackCount > 0)
+                                        displayName += $" [{scoredResult.Release.TrackCount}T]";
+                                    displayName += $" [For: {scoredResult.File.FileName}]";
+                                    if (scoredResult.Score > 0)
+                                        displayName += $" [{scoredResult.Score * 100:F1}%]";
+                                        
+                                    AddOnlineSourceResult(new OnlineSourceItem
+                                    {
+                                        DisplayName = displayName,
+                                        Source = scoredResult.Release,
+                                        SourceType = "Discogs",
+                                        Data = scoredResult.File // Store which file this result is for
+                                    }, scoredResult.File);
+                                    
+                                    // Load cover art asynchronously if URL is available
+                                    if (!string.IsNullOrEmpty(scoredResult.Release.CoverArtUrl))
+                                    {
+                                        _ = Task.Run(async () =>
+                                        {
+                                            try
+                                            {
+                                                scoredResult.Release.CoverArtImage = await _musicBrainzService.LoadCoverArtImage(scoredResult.Release.CoverArtUrl);
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                System.Diagnostics.Debug.WriteLine($"Error loading Discogs cover art: {ex.Message}");
+                                            }
+                                        });
+                                    }
+                                }
+
+                                successfulSearches++;
+                            }
+                        }
+
+                        // Small delay to be respectful to the API
+                        if (processedCount < totalFiles)
+                        {
+                            await Task.Delay(250); // 250ms delay between requests
+                        }
+                    }
+
+                    UpdateStatus($"Discogs search completed: {successfulSearches}/{totalFiles} files found results");
+                        }
+                finally
+                {
+                    Cursor = originalCursor;
                 }
-
-                // Auto-select the best overall match across all sources
-                SelectBestOverallMatch();
-
-                UpdateApplyButtonState();
             }
             catch (Exception ex)
             {
@@ -1080,29 +1866,124 @@ namespace TID3
 
         private void OnlineSource_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            UpdateApplyButtonState();
+            UpdateMatchScores();
+            
+            // Automatically apply the selected source to tag comparison
+            if (OnlineSourceComboBox.SelectedItem is OnlineSourceItem selectedSource)
+            {
+                // Only auto-apply if there's a target file available
+                if (selectedSource.Data is AudioFileInfo || SelectedFile != null)
+                {
+                    ApplyOnlineSourceToComparison(selectedSource);
+                }
+            }
         }
 
-        private void ApplyOnlineSource_Click(object sender, RoutedEventArgs e)
+        private void UpdateMatchScores()
         {
-            if (OnlineSourceComboBox.SelectedItem is not OnlineSourceItem selectedSource || SelectedFile == null)
+            // Clear existing match scores
+            foreach (var file in _audioFiles)
+            {
+                file.MatchScore = "";
+            }
+
+            if (OnlineSourceComboBox.SelectedItem is not OnlineSourceItem selectedSource)
                 return;
 
             try
             {
+                if (selectedSource.SourceType == "MusicBrainz" && selectedSource.Source is MusicBrainzRelease mbRelease)
+                {
+                    UpdateMusicBrainzMatchScores(mbRelease);
+                }
+                else if (selectedSource.SourceType == "Discogs" && selectedSource.Source is DiscogsRelease discogsRelease)
+                {
+                    UpdateDiscogsMatchScores(discogsRelease);
+                }
+                else if (selectedSource.SourceType == "Fingerprint" && selectedSource.Source is AcoustIdResult acoustIdResult)
+                {
+                    UpdateFingerprintMatchScores(acoustIdResult, selectedSource.Data as AudioFileInfo);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Silently handle errors in match score calculation
+                System.Diagnostics.Debug.WriteLine($"Error updating match scores: {ex.Message}");
+            }
+        }
+
+        private void UpdateMusicBrainzMatchScores(MusicBrainzRelease release)
+        {
+            foreach (var file in _audioFiles)
+            {
+                var score = CalculateMatchScore(file, release) * 100;
+                file.MatchScore = score > 0 ? $"{score:F0}%" : "";
+            }
+        }
+
+        private void UpdateDiscogsMatchScores(DiscogsRelease release)
+        {
+            foreach (var file in _audioFiles)
+            {
+                var score = CalculateMatchScore(file, release) * 100;
+                file.MatchScore = score > 0 ? $"{score:F0}%" : "";
+            }
+        }
+
+        private void UpdateFingerprintMatchScores(AcoustIdResult result, AudioFileInfo? targetFile)
+        {
+            if (targetFile != null)
+            {
+                var score = result.Score * 100;
+                targetFile.MatchScore = $"{score:F0}%";
+            }
+        }
+
+        private void ClearAllMatchScores()
+        {
+            foreach (var file in _audioFiles)
+            {
+                file.MatchScore = "";
+            }
+        }
+
+        private void ApplyOnlineSourceToComparison(OnlineSourceItem selectedSource)
+        {
+
+            try
+            {
+                // Determine which file this result is for
+                AudioFileInfo targetFile;
+                
+                if (selectedSource.Data is AudioFileInfo specificFile)
+                {
+                    // This result is for a specific file
+                    targetFile = specificFile;
+                }
+                else
+                {
+                    // Fallback to currently selected file
+                    if (SelectedFile == null)
+                    {
+                        MessageBox.Show("No target file selected.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                    targetFile = SelectedFile;
+                }
+
                 TagSnapshot newTags;
 
                 if (selectedSource.SourceType == "MusicBrainz" && selectedSource.Source is MusicBrainzRelease mbRelease)
                 {
-                    newTags = TagSnapshot.FromMusicBrainzRelease(mbRelease, null, SelectedFile);
+                    newTags = TagSnapshot.FromMusicBrainzRelease(mbRelease, null, targetFile);
                 }
                 else if (selectedSource.SourceType == "Discogs" && selectedSource.Source is DiscogsRelease discogsRelease)
                 {
-                    newTags = TagSnapshot.FromDiscogsRelease(discogsRelease, null, SelectedFile);
+                    newTags = TagSnapshot.FromDiscogsRelease(discogsRelease, null, targetFile);
                 }
                 else if (selectedSource.SourceType == "Fingerprint" && selectedSource.Source is AcoustIdResult acoustIdResult)
                 {
-                    newTags = TagSnapshot.FromAcoustIdResult(acoustIdResult, SelectedFile);
+                    newTags = TagSnapshot.FromAcoustIdResult(acoustIdResult, targetFile);
                 }
                 else
                 {
@@ -1111,20 +1992,27 @@ namespace TID3
                 }
 
                 // Apply the comparison using the existing tag comparison system
-                SelectedFile.UpdateComparison(newTags, $"Online: {selectedSource.SourceType}");
+                targetFile.UpdateComparison(newTags, $"Online: {selectedSource.SourceType}");
+
+                // Update cover art if available from online source
+                UpdateCoverArtFromOnlineSource(selectedSource, targetFile);
 
                 // Switch to comparison tab to show results
                 InfoTabControl.SelectedIndex = 1; // Tag Comparison tab
+                
+                // Update the comparison display
+                UpdateComparisonDisplay();
+                
+                // If the target file is not the currently selected file, select it
+                if (targetFile != SelectedFile)
+                {
+                    SelectedFile = targetFile;
+                }
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Error applying online source: {ex.Message}", "Application Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-        }
-
-        private void UpdateApplyButtonState()
-        {
-            ApplyOnlineSourceButton.IsEnabled = OnlineSourceComboBox.SelectedItem != null && SelectedFile != null;
         }
 
         private void SelectBestOverallMatch()
@@ -1181,7 +2069,7 @@ namespace TID3
                     }
 
                     // Apply the comparison and switch to comparison tab
-                    SelectedFile.UpdateComparison(newTags, $"Auto-selected: {bestItem.SourceType} [Match: {bestScore:F1}]");
+                    SelectedFile.UpdateComparison(newTags, $"Auto-selected: {bestItem.SourceType} [Match: {bestScore * 100:F1}%]");
                     InfoTabControl.SelectedIndex = 1; // Tag Comparison tab
                     UpdateComparisonDisplay();
                 }
@@ -1453,6 +2341,7 @@ namespace TID3
         {
             await CheckForUpdatesOnStartup();
             LoadWindowAndColumnSettings();
+            UpdateEditorPanelVisibility();
         }
 
         private void LoadWindowAndColumnSettings()
@@ -1787,6 +2676,9 @@ namespace TID3
             
             // Cleanup resources
             _updateService?.Dispose();
+            
+            // Clear online source cache
+            _cacheManager.ClearAllResults();
             
             // Cleanup scrollbar optimization timer
             if (_scrollbarOptimizationTimer != null)
