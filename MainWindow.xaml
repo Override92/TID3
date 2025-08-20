@@ -664,14 +664,19 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="400"/>
+            <RowDefinition Height="250"/>
         </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="5"/>
+            <ColumnDefinition Width="300"/>
+        </Grid.ColumnDefinitions>
 
         <!-- Header -->
-        <TextBlock Grid.Row="0" Text="TID3 - Advanced ID3 Tag Editor" Style="{StaticResource HeaderText}"/>
+        <TextBlock Grid.Row="0" Grid.ColumnSpan="3" Text="TID3 - Advanced ID3 Tag Editor" Style="{StaticResource HeaderText}"/>
 
         <!-- Toolbar -->
-        <Grid Grid.Row="1" Margin="0,0,0,12">
+        <Grid Grid.Row="1" Grid.ColumnSpan="3" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -692,6 +697,14 @@
                     <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
                           Data="M245,110.64A16,16,0,0,0,232,104H216V88a16,16,0,0,0-16-16H130.67L102.94,51.2a16.14,16.14,0,0,0-9.6-3.2H40A16,16,0,0,0,24,64V208h0a8,8,0,0,0,8,8H211.1a8,8,0,0,0,7.59-5.47l28.49-85.47A16.05,16.05,0,0,0,245,110.64ZM93.34,64,123.2,86.4A8,8,0,0,0,128,88h72v16H69.77a16,16,0,0,0-15.18,10.94L40,158.7V64Zm112,136H43.1l26.67-80H232Z"/>
                     <TextBlock Text="Load Folder" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+
+            <Button Click="RefreshCoverArt_Click" Style="{StaticResource ModernButton}" ToolTip="Scan for cover art files in loaded folders">
+                <StackPanel Orientation="Horizontal">
+                    <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
+                          Data="M230,128a102,102,0,0,1-36.16,78.46A6,6,0,0,1,188,198V134a6,6,0,0,1,12,0v51.11A90,90,0,1,0,56,170a6,6,0,0,1-12,0A102,102,0,1,1,230,128ZM196.24,59.76a6,6,0,0,0-8.48,0L166,81.52V24a6,6,0,0,0-12,0V81.52L132.24,59.76a6,6,0,0,0-8.48,8.48L145.52,90,123.76,111.76a6,6,0,1,0,8.48,8.48L154,98.48l21.76,21.76a6,6,0,0,0,8.48-8.48L162.48,90l21.76-21.76A6,6,0,0,0,196.24,59.76Z"/>
+                    <TextBlock Text="Refresh Cover Art" Margin="6,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
 
@@ -827,16 +840,8 @@
             </StackPanel>
         </Grid>
 
-        <!-- File List -->
-        <Grid Grid.Row="2">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="5"/>
-                <ColumnDefinition Width="300"/>
-            </Grid.ColumnDefinitions>
-
-            <!-- File List Section -->
-            <Grid Grid.Column="0">
+        <!-- File List Section -->
+        <Grid Grid.Row="2" Grid.Column="0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -1124,13 +1129,14 @@
             </TreeView>
             </Grid>
 
-            <GridSplitter Grid.Column="1" Background="{StaticResource BorderBrush}" 
-                         HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Padding="2,2,2,2" Margin="2,0,0,0" Width="2"/>
+        <!-- GridSplitter between File List and Tag Editor -->
+        <GridSplitter Grid.Row="2" Grid.Column="1" Grid.RowSpan="3" Background="{StaticResource BorderBrush}" 
+                     HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Padding="2,2,2,2" Margin="2,0,0,0" Width="2"/>
 
-            <!-- Tag Editor Panel -->
-            <ScrollViewer Grid.Column="2" Style="{StaticResource Windows11ScrollViewer}">
-                <StackPanel Margin="7,0,0,0">
-                    <!-- Header with selection info -->
+        <!-- Tag Editor Panel -->
+        <ScrollViewer Grid.Row="2" Grid.Column="2" Grid.RowSpan="3" Style="{StaticResource Windows11ScrollViewer}">
+            <StackPanel Margin="7,0,0,0">
+                <!-- Header with selection info -->
                     <StackPanel Margin="0,0,0,12">
                         <TextBlock Name="EditorHeaderText" Text="Tag Editor" Style="{StaticResource HeaderText}" FontSize="16"/>
                         <TextBlock Name="SelectionInfoText" Text="Select files to edit tags in batch" 
@@ -1186,6 +1192,57 @@
                                 TextWrapping="Wrap" 
                                 AcceptsReturn="True"/>
 
+                        <!-- Album Cover -->
+                        <Label Content="Album Cover:" Style="{StaticResource ModernLabel}" Margin="0,15,0,4"/>
+                        <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" 
+                               Background="{StaticResource SecondaryBrush}" Margin="0,0,12,0" 
+                               Width="200" Height="200" HorizontalAlignment="Left">
+                            <Grid>
+                                <Image Name="AlbumCoverImage" Source="{Binding AlbumCover}" 
+                                      Stretch="Uniform" StretchDirection="DownOnly" 
+                                      RenderOptions.BitmapScalingMode="HighQuality"/>
+                                <TextBlock Text="No Album Cover" 
+                                          Foreground="{StaticResource SubTextBrush}"
+                                          HorizontalAlignment="Center" 
+                                          VerticalAlignment="Center"
+                                          FontSize="11">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding AlbumCover}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+                        </Border>
+                        
+                        <!-- Cover Art Source -->
+                        <TextBlock Text="{Binding CoverArtSource}" 
+                                  Foreground="{StaticResource SubTextBrush}"
+                                  HorizontalAlignment="Left" 
+                                  FontSize="10"
+                                  Margin="0,4,12,0"
+                                  MaxWidth="200"
+                                  TextWrapping="Wrap">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding CoverArtSource}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding CoverArtSource}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
                         <Button Margin="0,20,12,0" Click="SaveSelected_Click" Style="{StaticResource ModernButton}">
                             <StackPanel Orientation="Horizontal">
                                 <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
@@ -1232,6 +1289,38 @@
                                 Margin="0,0,12,4"
                                 IsEnabled="{Binding ElementName=BatchYearCheck, Path=IsChecked}"/>
 
+                        <!-- Album Cover -->
+                        <TextBlock Text="Album Cover" 
+                                  FontWeight="SemiBold" 
+                                  Foreground="{StaticResource TextBrush}"
+                                  Margin="0,16,0,8"/>
+                        
+                        <Border Name="BatchAlbumCoverBorder" 
+                               BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" 
+                               Background="{StaticResource SecondaryBrush}" Margin="0,0,12,8" 
+                               Width="150" Height="150" HorizontalAlignment="Left">
+                            <Grid>
+                                <Image Name="BatchAlbumCoverImage" 
+                                      Stretch="Uniform" StretchDirection="DownOnly" 
+                                      RenderOptions.BitmapScalingMode="HighQuality"/>
+                                <TextBlock Name="BatchAlbumCoverText" Text="No Common Cover" 
+                                          Foreground="{StaticResource SubTextBrush}"
+                                          HorizontalAlignment="Center" 
+                                          VerticalAlignment="Center"
+                                          FontSize="11"/>
+                            </Grid>
+                        </Border>
+                        
+                        <!-- Batch Cover Art Source -->
+                        <TextBlock Name="BatchCoverArtSourceText" Text="" 
+                                  Foreground="{StaticResource SubTextBrush}"
+                                  HorizontalAlignment="Left" 
+                                  FontSize="10"
+                                  Margin="0,4,12,8"
+                                  MaxWidth="150"
+                                  TextWrapping="Wrap"
+                                  Visibility="Collapsed"/>
+
                         <!-- Advanced Options -->
                         <TextBlock Text="Advanced Options" 
                                   FontWeight="SemiBold" 
@@ -1256,17 +1345,16 @@
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>
-        </Grid>
 
         <!-- GridSplitter above Status/Info Panel -->
-        <GridSplitter Grid.Row="3" Height="2" HorizontalAlignment="Stretch" 
+        <GridSplitter Grid.Row="3" Grid.Column="0" Height="2" HorizontalAlignment="Stretch" 
                      Background="{StaticResource BorderBrush}" 
                      VerticalAlignment="Center" 
                      ResizeDirection="Rows"
                      Padding="2,2,2,2" Margin="1,4,1,1"/>
 
         <!-- Status/Info Panel -->
-        <Border Grid.Row="4" Background="{StaticResource SecondaryBrush}" 
+        <Border Grid.Row="4" Grid.Column="0" Background="{StaticResource SecondaryBrush}" 
                 BorderBrush="{StaticResource BorderBrush}" 
                 BorderThickness="1" 
                 CornerRadius="4" 
@@ -1426,35 +1514,10 @@
                             <Grid Grid.Row="0" Margin="0,0,0,8">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
-                                <!-- First Row: Comparison Mode and Show Empty Fields -->
+                                <!-- Combined Row: Online Source and Comparison Mode -->
                                 <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Text="Comparison Mode:" 
-                                              Foreground="{StaticResource TextBrush}" 
-                                              VerticalAlignment="Center" 
-                                              Margin="0,0,8,0"/>
-                                    <ComboBox x:Name="ComparisonModeComboBox" 
-                                             SelectionChanged="ComparisonMode_Changed"
-                                             MinWidth="150"
-                                             Style="{StaticResource ModernComboBox}">
-                                        <ComboBoxItem Content="All Fields" Style="{StaticResource ModernComboBoxItem}"/>
-                                        <ComboBoxItem Content="Changed Only" IsSelected="True" Style="{StaticResource ModernComboBoxItem}"/>
-                                        <ComboBoxItem Content="Missing Only" Style="{StaticResource ModernComboBoxItem}"/>
-                                    </ComboBox>
-
-                                    <CheckBox x:Name="ShowEmptyFieldsCheckBox" 
-                                             Content="Show empty fields"
-                                             Style="{StaticResource ModernCheckBox}"
-                                             Margin="16,0,0,0"
-                                             IsChecked="False"
-                                             Checked="ShowEmptyFields_Changed"
-                                             Unchecked="ShowEmptyFields_Changed"/>
-                                </StackPanel>
-
-                                <!-- Second Row: Online Database Source Selection -->
-                                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,0">
                                     <TextBlock Text="Online Source:" 
                                               Foreground="{StaticResource TextBrush}" 
                                               VerticalAlignment="Center" 
@@ -1465,16 +1528,19 @@
                                              DisplayMemberPath="DisplayName"
                                              SelectedValuePath="Source"
                                              Style="{StaticResource ModernComboBox}"/>
-
-                                    <Button x:Name="ApplyOnlineSourceButton"
-                                           Content="Apply to Comparison"
-                                           Click="ApplyOnlineSource_Click"
-                                           Style="{StaticResource ModernButton}"
-                                           FontSize="11" 
-                                           Padding="8,4" 
-                                           Margin="12,0,0,0"
-                                           Background="#FF28A745"
-                                           IsEnabled="False"/>
+                                    
+                                    <TextBlock Text="Comparison Mode:" 
+                                              Foreground="{StaticResource TextBrush}" 
+                                              VerticalAlignment="Center" 
+                                              Margin="24,0,8,0"/>
+                                    <ComboBox x:Name="ComparisonModeComboBox" 
+                                             SelectionChanged="ComparisonMode_Changed"
+                                             MinWidth="150"
+                                             Style="{StaticResource ModernComboBox}">
+                                        <ComboBoxItem Content="All Fields" Style="{StaticResource ModernComboBoxItem}"/>
+                                        <ComboBoxItem Content="Changed Only" IsSelected="True" Style="{StaticResource ModernComboBoxItem}"/>
+                                        <ComboBoxItem Content="Missing Only" Style="{StaticResource ModernComboBoxItem}"/>
+                                    </ComboBox>
                                 </StackPanel>
                             </Grid>
 

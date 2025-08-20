@@ -429,6 +429,8 @@ namespace TID3
         {
             ClearComparison();
             ClearHistory();
+            // Clean up album cover image to prevent memory leaks
+            AlbumCover = null;
         }
 
         private void AddToHistory(string action, string details)

@@ -80,6 +80,7 @@ namespace TID3
         private readonly MusicBrainzService _musicBrainzService;
         private readonly DiscogsService _discogsService;
         private readonly UpdateService _updateService;
+        private readonly OnlineSourceCacheManager _cacheManager;
         private readonly ObservableCollection<AudioFileInfo> _audioFiles;
         private readonly ObservableCollection<OnlineSourceItem> _onlineSourceItems;
         private readonly ObservableCollection<AlbumGroup> _hierarchicalItems;
@@ -103,8 +104,17 @@ namespace TID3
                 _selectedFile = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsFileSelected));
-                // Clear the online source dropdown when switching files
+                
+                // Load cached online source results for the selected file
                 _onlineSourceItems.Clear();
+                if (_selectedFile != null)
+                {
+                    var cachedResults = _cacheManager.GetResults(_selectedFile.FilePath);
+                    foreach (var result in cachedResults)
+                    {
+                        _onlineSourceItems.Add(result);
+                    }
+                }
                 
                 // Subscribe to new file's events
                 if (_selectedFile != null)
@@ -115,8 +125,7 @@ namespace TID3
                 // Update button state after initialization is complete
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    UpdateApplyButtonState();
-                }));
+                        }));
             }
         }
 
@@ -134,6 +143,7 @@ namespace TID3
             _musicBrainzService = new MusicBrainzService();
             _discogsService = new DiscogsService();
             _updateService = new UpdateService();
+            _cacheManager = new OnlineSourceCacheManager();
             _audioFiles = new ObservableCollection<AudioFileInfo>();
             _onlineSourceItems = new ObservableCollection<OnlineSourceItem>();
             _hierarchicalItems = new ObservableCollection<AlbumGroup>();
@@ -490,18 +500,82 @@ namespace TID3
                     await Task.Delay(1);
                 }
 
+                // Refresh folder-based cover art for all loaded files
+                Title = "TID3 - Scanning for cover art files...";
+                await Task.Run(() => {
+                    _tagService.RefreshFolderCoverArt(_audioFiles);
+                });
+
                 // Reset title and show completion status
                 Title = "TID3 - Advanced ID3 Tag Editor";
                 var avgTimePerFile = totalFiles > 0 ? stopwatch.ElapsedMilliseconds / (double)totalFiles : 0;
                 var threadsNote = maxDegreeOfParallelism > 1 ? $"{maxDegreeOfParallelism} threads" : "1 thread";
                 var performanceNote = avgTimePerFile < 50 ? "Fast" : avgTimePerFile < 200 ? "Good" : "Slow";
-                UpdateStatus($"Loaded {successfulCount}/{totalFiles} files in {stopwatch.ElapsedMilliseconds}ms ({performanceNote}: {avgTimePerFile:F0}ms/file, {threadsNote}).");
+                
+                // Count files with cover art
+                var filesWithCoverArt = _audioFiles.Count(f => f.AlbumCover != null);
+                var coverArtNote = filesWithCoverArt > 0 ? $", {filesWithCoverArt} with cover art" : "";
+                
+                UpdateStatus($"Loaded {successfulCount}/{totalFiles} files in {stopwatch.ElapsedMilliseconds}ms ({performanceNote}: {avgTimePerFile:F0}ms/file, {threadsNote}){coverArtNote}.");
             }
             catch (Exception ex)
             {
                 // Reset title on error
                 Title = "TID3 - Advanced ID3 Tag Editor";
                 MessageBox.Show($"Error loading files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void RefreshCoverArt_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_audioFiles.Any())
+            {
+                MessageBox.Show("No files loaded. Please load some audio files first.", "No Files", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            try
+            {
+                // Show progress
+                Title = "TID3 - Scanning for cover art files...";
+                UpdateStatus("Scanning folders for cover art files...");
+
+                // Count files before refresh
+                var beforeCount = _audioFiles.Count(f => f.AlbumCover != null);
+
+                await Task.Run(() => {
+                    _tagService.RefreshFolderCoverArt(_audioFiles);
+                });
+
+                // Count files after refresh
+                var afterCount = _audioFiles.Count(f => f.AlbumCover != null);
+                var newCoverArts = afterCount - beforeCount;
+
+                // Reset title
+                Title = "TID3 - Advanced ID3 Tag Editor";
+
+                // Update status with results
+                string message;
+                if (newCoverArts > 0)
+                {
+                    message = $"Cover art refresh completed. Found {newCoverArts} new cover art files. Total: {afterCount} files with cover art.";
+                    UpdateStatus(message);
+                    MessageBox.Show($"Found {newCoverArts} new cover art files!", "Cover Art Found", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    message = $"Cover art refresh completed. No new cover art files found. Total: {afterCount} files with cover art.";
+                    UpdateStatus(message);
+                    MessageBox.Show("No new cover art files found in the loaded folders.", "Refresh Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+
+                // Refresh batch cover display if needed
+                UpdateBatchAlbumCover();
+            }
+            catch (Exception ex)
+            {
+                Title = "TID3 - Advanced ID3 Tag Editor";
+                MessageBox.Show($"Error refreshing cover art: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -515,10 +589,17 @@ namespace TID3
 
             try
             {
-                if (_tagService.SaveFile(SelectedFile))
+                var (success, coverArtSaved) = _tagService.SaveFile(SelectedFile);
+                if (success)
                 {
+                    string message = "File saved successfully!";
+                    if (coverArtSaved)
+                    {
+                        message += $"\nCover art also saved to album folder.";
+                    }
+                    
                     UpdateStatus($"Successfully saved: {SelectedFile.FileName}");
-                    MessageBox.Show("File saved successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(message, "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 else
                 {
@@ -548,18 +629,27 @@ namespace TID3
 
             try
             {
-                int saved = await Task.Run(() =>
+                var (saved, coverArtsSaved) = await Task.Run(() =>
                 {
-                    int count = 0;
+                    int savedCount = 0;
+                    int coverArtCount = 0;
+                    
                     foreach (var file in _audioFiles)
                     {
-                        if (_tagService.SaveFile(file))
-                            count++;
+                        var (success, coverArtSaved) = _tagService.SaveFile(file);
+                        if (success) savedCount++;
+                        if (coverArtSaved) coverArtCount++;
                     }
-                    return count;
+                    return (savedCount, coverArtCount);
                 });
 
-                UpdateStatus($"Saved {saved} of {_audioFiles.Count} files successfully.");
+                string statusMessage = $"Saved {saved} of {_audioFiles.Count} files successfully.";
+                if (coverArtsSaved > 0)
+                {
+                    statusMessage += $" {coverArtsSaved} cover arts saved to folders.";
+                }
+                
+                UpdateStatus(statusMessage);
                 MessageBox.Show($"Saved {saved} of {_audioFiles.Count} files.", "Save Complete", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -686,6 +776,8 @@ namespace TID3
             {
                 // Remove single track
                 _audioFiles.Remove(audioFile);
+                // Clear cache for this file
+                _cacheManager.ClearResultsForFile(audioFile.FilePath);
             }
             else if (selectedItem is AlbumGroup albumGroup)
             {
@@ -694,7 +786,15 @@ namespace TID3
                 foreach (var track in tracksToRemove)
                 {
                     _audioFiles.Remove(track);
+                    // Clear cache for each track
+                    _cacheManager.ClearResultsForFile(track.FilePath);
                 }
+            }
+            
+            // Clear current UI display if the removed file was selected
+            if (selectedItem is AudioFileInfo removedFile && SelectedFile?.FilePath == removedFile.FilePath)
+            {
+                _onlineSourceItems.Clear();
             }
             
             // Update UI
@@ -719,6 +819,7 @@ namespace TID3
                 SelectionInfoText.Text = "Select files to edit tags";
                 SingleEditPanel.Visibility = Visibility.Collapsed;
                 BatchEditPanel.Visibility = Visibility.Collapsed;
+                ClearBatchAlbumCover();
             }
             else if (selectedItem is AudioFileInfo)
             {
@@ -727,6 +828,7 @@ namespace TID3
                 SelectionInfoText.Text = "Editing single file";
                 SingleEditPanel.Visibility = Visibility.Visible;
                 BatchEditPanel.Visibility = Visibility.Collapsed;
+                ClearBatchAlbumCover();
             }
             else if (selectedItem is AlbumGroup albumGroup)
             {
@@ -736,6 +838,209 @@ namespace TID3
                 SelectionInfoText.Text = $"Editing all tracks in '{albumGroup.AlbumInfo}'";
                 SingleEditPanel.Visibility = Visibility.Collapsed;
                 BatchEditPanel.Visibility = Visibility.Visible;
+                
+                // Update batch album cover display
+                UpdateBatchAlbumCover(albumGroup);
+                
+                // Update batch field values
+                UpdateBatchFieldValues(albumGroup.Tracks.ToList());
+            }
+        }
+
+        private void UpdateBatchAlbumCover(AlbumGroup albumGroup)
+        {
+            try
+            {
+                // Check if all tracks in the album have the same cover
+                var albumCovers = albumGroup.Tracks
+                    .Where(track => track.AlbumCover != null)
+                    .Select(track => track.AlbumCover)
+                    .Distinct()
+                    .ToList();
+
+                // Check cover art sources
+                var coverSources = albumGroup.Tracks
+                    .Where(track => !string.IsNullOrEmpty(track.CoverArtSource))
+                    .Select(track => track.CoverArtSource)
+                    .Distinct()
+                    .ToList();
+
+                if (albumCovers.Count == 1)
+                {
+                    // All tracks have the same cover (or only one track has a cover)
+                    BatchAlbumCoverImage.Source = albumCovers.First();
+                    BatchAlbumCoverText.Visibility = Visibility.Collapsed;
+                    
+                    // Show cover art source
+                    if (coverSources.Count == 1)
+                    {
+                        BatchCoverArtSourceText.Text = coverSources.First();
+                        BatchCoverArtSourceText.Visibility = Visibility.Visible;
+                    }
+                    else if (coverSources.Count > 1)
+                    {
+                        BatchCoverArtSourceText.Text = "Multiple sources";
+                        BatchCoverArtSourceText.Visibility = Visibility.Visible;
+                    }
+                    else
+                    {
+                        BatchCoverArtSourceText.Visibility = Visibility.Collapsed;
+                    }
+                }
+                else if (albumCovers.Count > 1)
+                {
+                    // Multiple different covers
+                    BatchAlbumCoverImage.Source = null;
+                    BatchAlbumCoverText.Text = "Multiple Covers";
+                    BatchAlbumCoverText.Visibility = Visibility.Visible;
+                    BatchCoverArtSourceText.Text = "Multiple sources";
+                    BatchCoverArtSourceText.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    // No covers found
+                    BatchAlbumCoverImage.Source = null;
+                    BatchAlbumCoverText.Text = "No Album Cover";
+                    BatchAlbumCoverText.Visibility = Visibility.Visible;
+                    BatchCoverArtSourceText.Visibility = Visibility.Collapsed;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error updating batch album cover: {ex.Message}");
+                BatchAlbumCoverImage.Source = null;
+                BatchAlbumCoverText.Text = "Error Loading Cover";
+                BatchAlbumCoverText.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void ClearBatchAlbumCover()
+        {
+            try
+            {
+                BatchAlbumCoverImage.Source = null;
+                BatchAlbumCoverText.Text = "No Common Cover";
+                BatchAlbumCoverText.Visibility = Visibility.Visible;
+                
+                // Also clear batch field values
+                ClearBatchFieldValues();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error clearing batch album cover: {ex.Message}");
+            }
+        }
+        
+        private void ClearBatchFieldValues()
+        {
+            try
+            {
+                BatchAlbumText.Text = "";
+                BatchAlbumArtistText.Text = "";
+                BatchGenreText.Text = "";
+                BatchYearText.Text = "";
+                
+                BatchAlbumText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                BatchAlbumArtistText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                BatchGenreText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                BatchYearText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                
+                BatchAlbumCheck.IsChecked = false;
+                BatchAlbumArtistCheck.IsChecked = false;
+                BatchGenreCheck.IsChecked = false;
+                BatchYearCheck.IsChecked = false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error clearing batch field values: {ex.Message}");
+            }
+        }
+
+        private void UpdateBatchFieldValues(List<AudioFileInfo> tracks)
+        {
+            try
+            {
+                // Update Album field
+                var albums = tracks.Select(t => t.Album).Distinct().ToList();
+                if (albums.Count == 1)
+                {
+                    BatchAlbumText.Text = albums.First();
+                    BatchAlbumText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+                else if (albums.Count > 1)
+                {
+                    BatchAlbumText.Text = "[Multiple Values]";
+                    BatchAlbumText.Foreground = (System.Windows.Media.Brush)Resources["SubTextBrush"];
+                }
+                else
+                {
+                    BatchAlbumText.Text = "";
+                    BatchAlbumText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+
+                // Update Album Artist field
+                var albumArtists = tracks.Select(t => t.AlbumArtist).Distinct().ToList();
+                if (albumArtists.Count == 1)
+                {
+                    BatchAlbumArtistText.Text = albumArtists.First();
+                    BatchAlbumArtistText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+                else if (albumArtists.Count > 1)
+                {
+                    BatchAlbumArtistText.Text = "[Multiple Values]";
+                    BatchAlbumArtistText.Foreground = (System.Windows.Media.Brush)Resources["SubTextBrush"];
+                }
+                else
+                {
+                    BatchAlbumArtistText.Text = "";
+                    BatchAlbumArtistText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+
+                // Update Genre field
+                var genres = tracks.Select(t => t.Genre).Distinct().ToList();
+                if (genres.Count == 1)
+                {
+                    BatchGenreText.Text = genres.First();
+                    BatchGenreText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+                else if (genres.Count > 1)
+                {
+                    BatchGenreText.Text = "[Multiple Values]";
+                    BatchGenreText.Foreground = (System.Windows.Media.Brush)Resources["SubTextBrush"];
+                }
+                else
+                {
+                    BatchGenreText.Text = "";
+                    BatchGenreText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+
+                // Update Year field
+                var years = tracks.Select(t => t.Year).Where(y => y > 0).Distinct().ToList();
+                if (years.Count == 1)
+                {
+                    BatchYearText.Text = years.First().ToString();
+                    BatchYearText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+                else if (years.Count > 1)
+                {
+                    BatchYearText.Text = "[Multiple Values]";
+                    BatchYearText.Foreground = (System.Windows.Media.Brush)Resources["SubTextBrush"];
+                }
+                else
+                {
+                    BatchYearText.Text = "";
+                    BatchYearText.Foreground = (System.Windows.Media.Brush)Resources["TextBrush"];
+                }
+
+                // Reset checkboxes to unchecked by default
+                BatchAlbumCheck.IsChecked = false;
+                BatchAlbumArtistCheck.IsChecked = false;
+                BatchGenreCheck.IsChecked = false;
+                BatchYearCheck.IsChecked = false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error updating batch field values: {ex.Message}");
             }
         }
 
@@ -855,7 +1160,11 @@ namespace TID3
                 }
 
                 // Save the file
-                _tagService.SaveFile(file);
+                var (success, coverArtSaved) = _tagService.SaveFile(file);
+                if (coverArtSaved)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Cover art saved to album folder for batch edit: {file.FileName}");
+                }
             }
         }
 
@@ -945,6 +1254,10 @@ namespace TID3
                 _audioFiles.Clear();
                 SelectedFile = null!;
                 
+                // Clear all cached online source results
+                _cacheManager.ClearAllResults();
+                _onlineSourceItems.Clear();
+                
                 UpdateStatus("File list cleared.");
             }
         }
@@ -985,17 +1298,11 @@ namespace TID3
             UpdateComparisonDisplay();
         }
 
-        private void ShowEmptyFields_Changed(object sender, RoutedEventArgs e)
-        {
-            UpdateComparisonDisplay();
-        }
-
         private void UpdateComparisonDisplay()
         {
             if (SelectedFile?.TagComparison == null) return;
 
             var mode = (ComparisonMode)ComparisonModeComboBox.SelectedIndex;
-            var showEmpty = ShowEmptyFieldsCheckBox.IsChecked ?? false;
 
             var filteredComparison = SelectedFile.TagComparison.AsEnumerable();
 
@@ -1009,11 +1316,7 @@ namespace TID3
                     break;
             }
 
-            if (!showEmpty)
-            {
-                filteredComparison = filteredComparison.Where(c =>
-                    !string.IsNullOrWhiteSpace(c.OriginalValue) || !string.IsNullOrWhiteSpace(c.NewValue));
-            }
+            // Always show empty fields - removed the showEmpty filter
 
             TagComparisonDataGrid.ItemsSource = filteredComparison.ToList();
         }
@@ -1145,17 +1448,65 @@ namespace TID3
             OnlineSourceComboBox.ItemsSource = _onlineSourceItems;
         }
 
+        private void UpdateCoverArtFromOnlineSource(OnlineSourceItem selectedSource, AudioFileInfo targetFile)
+        {
+            try
+            {
+                System.Windows.Media.Imaging.BitmapImage? coverImage = null;
+                string coverSource = "";
+
+                if (selectedSource.SourceType == "MusicBrainz" && selectedSource.Source is MusicBrainzRelease mbRelease)
+                {
+                    coverImage = mbRelease.CoverArtImage;
+                    coverSource = "MusicBrainz Cover Art Archive";
+                }
+                else if (selectedSource.SourceType == "Discogs" && selectedSource.Source is DiscogsRelease discogsRelease)
+                {
+                    coverImage = discogsRelease.CoverArtImage;
+                    coverSource = "Discogs";
+                }
+
+                if (coverImage != null)
+                {
+                    // Update the target file with the new cover art
+                    targetFile.AlbumCover = coverImage;
+                    targetFile.CoverArtSource = coverSource;
+                    
+                    System.Diagnostics.Debug.WriteLine($"Cover art loaded from {coverSource} for {targetFile.FileName}");
+                    
+                    // Update batch editor if multiple files are selected
+                    UpdateBatchAlbumCover();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error updating cover art: {ex.Message}");
+            }
+        }
+
+        private void UpdateBatchAlbumCover()
+        {
+            // Update batch cover for currently selected files
+            var selectedFiles = GetSelectedFiles();
+            if (selectedFiles.Count > 1)
+            {
+                // Create a temporary album group for the selected files
+                var tempGroup = new AlbumGroup();
+                foreach (var file in selectedFiles)
+                {
+                    tempGroup.Tracks.Add(file);
+                }
+                UpdateBatchAlbumCover(tempGroup);
+            }
+        }
+
         private async void SearchMusicBrainz_Click(object sender, RoutedEventArgs e)
         {
             var selectedFiles = GetSelectedFiles();
             if (!selectedFiles.Any()) return;
 
             // Clear existing MusicBrainz results
-            var existingMB = _onlineSourceItems.Where(x => x.SourceType == "MusicBrainz").ToList();
-            foreach (var item in existingMB)
-            {
-                _onlineSourceItems.Remove(item);
-            }
+            ClearOnlineSourceResults("MusicBrainz");
             
             // Clear match scores from previous searches
             ClearAllMatchScores();
@@ -1203,14 +1554,32 @@ namespace TID3
                                         displayName += $" [{scoredResult.Release.TrackCount}T]";
                                     displayName += $" [For: {scoredResult.File.FileName}]";
                                     if (scoredResult.Score > 0)
-                                        displayName += $" [{scoredResult.Score:F1}%]";
+                                        displayName += $" [{scoredResult.Score * 100:F1}%]";
                                         
-                                    _onlineSourceItems.Add(new OnlineSourceItem
+                                    AddOnlineSourceResult(new OnlineSourceItem
                                     {
                                         DisplayName = displayName,
                                         Source = scoredResult.Release,
                                         SourceType = "MusicBrainz",
                                         Data = scoredResult.File // Store which file this result is for
+                                    }, scoredResult.File);
+                                    
+                                    // Load cover art asynchronously
+                                    _ = Task.Run(async () =>
+                                    {
+                                        try
+                                        {
+                                            var coverUrl = await _musicBrainzService.GetCoverArtUrl(scoredResult.Release.Id);
+                                            if (!string.IsNullOrEmpty(coverUrl))
+                                            {
+                                                scoredResult.Release.CoverArtUrl = coverUrl;
+                                                scoredResult.Release.CoverArtImage = await _musicBrainzService.LoadCoverArtImage(coverUrl);
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            System.Diagnostics.Debug.WriteLine($"Error loading MusicBrainz cover art: {ex.Message}");
+                                        }
                                     });
                                 }
 
@@ -1226,8 +1595,7 @@ namespace TID3
                     }
 
                     UpdateStatus($"MusicBrainz search completed: {successfulSearches}/{totalFiles} files found results");
-                    UpdateApplyButtonState();
-                }
+                        }
                 finally
                 {
                     Cursor = originalCursor;
@@ -1236,6 +1604,44 @@ namespace TID3
             catch (Exception ex)
             {
                 MessageBox.Show($"Error searching MusicBrainz: {ex.Message}", "Search Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void AddOnlineSourceResult(OnlineSourceItem result, AudioFileInfo targetFile)
+        {
+            _onlineSourceItems.Add(result);
+            
+            // Update cache for the target file
+            var currentResults = _cacheManager.GetResults(targetFile.FilePath);
+            currentResults.Add(result);
+            _cacheManager.StoreResults(targetFile.FilePath, currentResults);
+        }
+
+        private void ClearOnlineSourceResults(string sourceType, AudioFileInfo? specificFile = null)
+        {
+            // Remove from UI
+            var existingItems = _onlineSourceItems.Where(x => x.SourceType == sourceType).ToList();
+            foreach (var item in existingItems)
+            {
+                _onlineSourceItems.Remove(item);
+            }
+            
+            // Update cache for all affected files
+            if (specificFile != null)
+            {
+                var currentResults = _cacheManager.GetResults(specificFile.FilePath);
+                var filteredResults = currentResults.Where(x => x.SourceType != sourceType).ToList();
+                _cacheManager.StoreResults(specificFile.FilePath, filteredResults);
+            }
+            else
+            {
+                // Clear from all files in cache
+                foreach (var filePath in _cacheManager.GetCachedFilePaths().ToList())
+                {
+                    var currentResults = _cacheManager.GetResults(filePath);
+                    var filteredResults = currentResults.Where(x => x.SourceType != sourceType).ToList();
+                    _cacheManager.StoreResults(filePath, filteredResults);
+                }
             }
         }
 
@@ -1261,11 +1667,7 @@ namespace TID3
             }
 
             // Clear existing fingerprint results
-            var existingFingerprint = _onlineSourceItems.Where(x => x.SourceType == "Fingerprint").ToList();
-            foreach (var item in existingFingerprint)
-            {
-                _onlineSourceItems.Remove(item);
-            }
+            ClearOnlineSourceResults("Fingerprint");
             
             // Clear match scores from previous searches
             ClearAllMatchScores();
@@ -1307,7 +1709,7 @@ namespace TID3
                                     displayName += $" [{album}]";
                                 displayName += $" [For: {file.FileName}]";
                                     
-                                _onlineSourceItems.Add(new OnlineSourceItem
+                                AddOnlineSourceResult(new OnlineSourceItem
                                 {
                                     DisplayName = displayName,
                                     Source = result,
@@ -1318,7 +1720,7 @@ namespace TID3
                                     Score = score + "%",
                                     AdditionalInfo = $"Duration: {result.Duration}s",
                                     Data = file // Store which file this result is for
-                                });
+                                }, file);
                             }
 
                             // Auto-apply best result to the file's comparison
@@ -1345,8 +1747,7 @@ namespace TID3
                         UpdateComparisonDisplay();
                     }
                     
-                    UpdateApplyButtonState();
-                }
+                        }
                 finally
                 {
                     Cursor = originalCursor;
@@ -1364,11 +1765,7 @@ namespace TID3
             if (!selectedFiles.Any()) return;
 
             // Clear existing Discogs results
-            var existingDiscogs = _onlineSourceItems.Where(x => x.SourceType == "Discogs").ToList();
-            foreach (var item in existingDiscogs)
-            {
-                _onlineSourceItems.Remove(item);
-            }
+            ClearOnlineSourceResults("Discogs");
             
             // Clear match scores from previous searches
             ClearAllMatchScores();
@@ -1416,15 +1813,31 @@ namespace TID3
                                         displayName += $" [{scoredResult.Release.TrackCount}T]";
                                     displayName += $" [For: {scoredResult.File.FileName}]";
                                     if (scoredResult.Score > 0)
-                                        displayName += $" [{scoredResult.Score:F1}%]";
+                                        displayName += $" [{scoredResult.Score * 100:F1}%]";
                                         
-                                    _onlineSourceItems.Add(new OnlineSourceItem
+                                    AddOnlineSourceResult(new OnlineSourceItem
                                     {
                                         DisplayName = displayName,
                                         Source = scoredResult.Release,
                                         SourceType = "Discogs",
                                         Data = scoredResult.File // Store which file this result is for
-                                    });
+                                    }, scoredResult.File);
+                                    
+                                    // Load cover art asynchronously if URL is available
+                                    if (!string.IsNullOrEmpty(scoredResult.Release.CoverArtUrl))
+                                    {
+                                        _ = Task.Run(async () =>
+                                        {
+                                            try
+                                            {
+                                                scoredResult.Release.CoverArtImage = await _musicBrainzService.LoadCoverArtImage(scoredResult.Release.CoverArtUrl);
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                System.Diagnostics.Debug.WriteLine($"Error loading Discogs cover art: {ex.Message}");
+                                            }
+                                        });
+                                    }
                                 }
 
                                 successfulSearches++;
@@ -1439,8 +1852,7 @@ namespace TID3
                     }
 
                     UpdateStatus($"Discogs search completed: {successfulSearches}/{totalFiles} files found results");
-                    UpdateApplyButtonState();
-                }
+                        }
                 finally
                 {
                     Cursor = originalCursor;
@@ -1454,8 +1866,17 @@ namespace TID3
 
         private void OnlineSource_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            UpdateApplyButtonState();
             UpdateMatchScores();
+            
+            // Automatically apply the selected source to tag comparison
+            if (OnlineSourceComboBox.SelectedItem is OnlineSourceItem selectedSource)
+            {
+                // Only auto-apply if there's a target file available
+                if (selectedSource.Data is AudioFileInfo || SelectedFile != null)
+                {
+                    ApplyOnlineSourceToComparison(selectedSource);
+                }
+            }
         }
 
         private void UpdateMatchScores()
@@ -1495,7 +1916,7 @@ namespace TID3
         {
             foreach (var file in _audioFiles)
             {
-                var score = CalculateMatchScore(file, release);
+                var score = CalculateMatchScore(file, release) * 100;
                 file.MatchScore = score > 0 ? $"{score:F0}%" : "";
             }
         }
@@ -1504,7 +1925,7 @@ namespace TID3
         {
             foreach (var file in _audioFiles)
             {
-                var score = CalculateMatchScore(file, release);
+                var score = CalculateMatchScore(file, release) * 100;
                 file.MatchScore = score > 0 ? $"{score:F0}%" : "";
             }
         }
@@ -1526,10 +1947,8 @@ namespace TID3
             }
         }
 
-        private void ApplyOnlineSource_Click(object sender, RoutedEventArgs e)
+        private void ApplyOnlineSourceToComparison(OnlineSourceItem selectedSource)
         {
-            if (OnlineSourceComboBox.SelectedItem is not OnlineSourceItem selectedSource)
-                return;
 
             try
             {
@@ -1575,8 +1994,14 @@ namespace TID3
                 // Apply the comparison using the existing tag comparison system
                 targetFile.UpdateComparison(newTags, $"Online: {selectedSource.SourceType}");
 
+                // Update cover art if available from online source
+                UpdateCoverArtFromOnlineSource(selectedSource, targetFile);
+
                 // Switch to comparison tab to show results
                 InfoTabControl.SelectedIndex = 1; // Tag Comparison tab
+                
+                // Update the comparison display
+                UpdateComparisonDisplay();
                 
                 // If the target file is not the currently selected file, select it
                 if (targetFile != SelectedFile)
@@ -1588,11 +2013,6 @@ namespace TID3
             {
                 MessageBox.Show($"Error applying online source: {ex.Message}", "Application Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-        }
-
-        private void UpdateApplyButtonState()
-        {
-            ApplyOnlineSourceButton.IsEnabled = OnlineSourceComboBox.SelectedItem != null && SelectedFile != null;
         }
 
         private void SelectBestOverallMatch()
@@ -1649,7 +2069,7 @@ namespace TID3
                     }
 
                     // Apply the comparison and switch to comparison tab
-                    SelectedFile.UpdateComparison(newTags, $"Auto-selected: {bestItem.SourceType} [Match: {bestScore:F1}]");
+                    SelectedFile.UpdateComparison(newTags, $"Auto-selected: {bestItem.SourceType} [Match: {bestScore * 100:F1}%]");
                     InfoTabControl.SelectedIndex = 1; // Tag Comparison tab
                     UpdateComparisonDisplay();
                 }
@@ -2256,6 +2676,9 @@ namespace TID3
             
             // Cleanup resources
             _updateService?.Dispose();
+            
+            // Clear online source cache
+            _cacheManager.ClearAllResults();
             
             // Cleanup scrollbar optimization timer
             if (_scrollbarOptimizationTimer != null)

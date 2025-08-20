@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Windows.Media.Imaging;
 using TagLib;
 
 namespace TID3
@@ -114,6 +115,84 @@ namespace TID3
             }
         }
 
+        public async Task<string?> GetCoverArtUrl(string releaseId)
+        {
+            try
+            {
+                var url = $"https://coverartarchive.org/release/{releaseId}";
+                var response = await _client.GetStringAsync(url);
+                using var document = JsonDocument.Parse(response);
+                var data = document.RootElement;
+
+                if (data.TryGetProperty("images", out var images) && images.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var image in images.EnumerateArray())
+                    {
+                        // Look for front cover first
+                        if (image.TryGetProperty("front", out var front) && front.GetBoolean())
+                        {
+                            if (image.TryGetProperty("thumbnails", out var thumbnails))
+                            {
+                                // Prefer small thumbnail for better performance
+                                if (thumbnails.TryGetProperty("small", out var small))
+                                    return small.GetString();
+                                if (thumbnails.TryGetProperty("large", out var large))
+                                    return large.GetString();
+                            }
+                            // Fallback to full image
+                            if (image.TryGetProperty("image", out var imageUrl))
+                                return imageUrl.GetString();
+                        }
+                    }
+                    
+                    // If no front cover found, use first available image
+                    var firstImage = images.EnumerateArray().FirstOrDefault();
+                    if (firstImage.TryGetProperty("thumbnails", out var firstThumbnails))
+                    {
+                        if (firstThumbnails.TryGetProperty("small", out var firstSmall))
+                            return firstSmall.GetString();
+                    }
+                }
+            }
+            catch (HttpRequestException)
+            {
+                // Cover art not available - this is normal and not an error
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error getting MusicBrainz cover art: {ex.Message}");
+            }
+            return null;
+        }
+
+        public async Task<BitmapImage?> LoadCoverArtImage(string? imageUrl)
+        {
+            if (string.IsNullOrEmpty(imageUrl))
+                return null;
+                
+            try
+            {
+                var response = await _client.GetAsync(imageUrl);
+                if (response.IsSuccessStatusCode)
+                {
+                    var imageData = await response.Content.ReadAsByteArrayAsync();
+                    var bitmapImage = new BitmapImage();
+                    bitmapImage.BeginInit();
+                    bitmapImage.StreamSource = new MemoryStream(imageData);
+                    bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmapImage.DecodePixelWidth = 200; // Optimize for display size
+                    bitmapImage.EndInit();
+                    bitmapImage.Freeze(); // Make it cross-thread accessible
+                    return bitmapImage;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error loading cover art image: {ex.Message}");
+            }
+            return null;
+        }
+
         public void RefreshSettings()
         {
             _settings = SettingsManager.LoadSettings();
@@ -215,7 +294,8 @@ namespace TID3
                             Artist = GetDiscogsArtistString(result),
                             Year = GetDiscogsYearString(result),
                             Genre = GetDiscogsGenreString(result),
-                            TrackCount = GetDiscogsTrackCount(result)
+                            TrackCount = GetDiscogsTrackCount(result),
+                            CoverArtUrl = GetDiscogsCoverArtUrl(result)
                         });
                     }
                 }
@@ -403,6 +483,26 @@ namespace TID3
 
             return 0; // Track count not available
         }
+        
+        private static string? GetDiscogsCoverArtUrl(JsonElement element)
+        {
+            if (element.TryGetProperty("cover_image", out var coverElement))
+            {
+                var url = coverElement.GetString();
+                if (!string.IsNullOrEmpty(url))
+                {
+                    return url;
+                }
+            }
+            
+            // Fallback to thumb if cover_image is not available
+            if (element.TryGetProperty("thumb", out var thumbElement))
+            {
+                return thumbElement.GetString();
+            }
+            
+            return null;
+        }
     }
 
     public class TagService
@@ -430,7 +530,9 @@ namespace TID3
                     Comment = tag.Comment ?? string.Empty,
                     Duration = FormatDuration(properties.Duration),
                     Bitrate = FormatBitrate(properties.AudioBitrate),
-                    FileSize = FormatFileSize(new FileInfo(filePath).Length)
+                    FileSize = FormatFileSize(new FileInfo(filePath).Length),
+                    AlbumCover = LoadAlbumCover(tag) ?? LoadCoverArtFromFolder(filePath),
+                    CoverArtSource = GetCoverArtSource(tag, filePath)
                 };
                 return audioFile;
             }
@@ -479,7 +581,7 @@ namespace TID3
             return $"{number:n1} {suffixes[counter]}";
         }
 
-        public bool SaveFile(AudioFileInfo audioFile)
+        public (bool Success, bool CoverArtSaved) SaveFile(AudioFileInfo audioFile)
         {
             try
             {
@@ -493,24 +595,393 @@ namespace TID3
                 file.Tag.AlbumArtists = [.. audioFile.AlbumArtist.Split(',').Select(s => s.Trim())];
                 file.Tag.Comment = audioFile.Comment;
                 file.Save();
-                return true;
+                
+                // Save cover art to album folder if it's from an online source
+                bool coverArtSaved = SaveCoverArtToFolder(audioFile);
+                if (coverArtSaved)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Cover art saved to album folder for: {audioFile.FileName}");
+                }
+                
+                return (true, coverArtSaved);
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Error saving file {audioFile.FilePath}: {ex.Message}");
-                return false;
+                return (false, false);
             }
         }
 
-        public void BatchUpdate(IEnumerable<AudioFileInfo> files, AudioFileInfo template)
+        public (int SavedFiles, int CoverArtsSaved) BatchUpdate(IEnumerable<AudioFileInfo> files, AudioFileInfo template)
         {
+            int savedFiles = 0;
+            int coverArtsSaved = 0;
+            
             foreach (var file in files)
             {
                 if (!string.IsNullOrEmpty(template.Album)) file.Album = template.Album;
                 if (!string.IsNullOrEmpty(template.AlbumArtist)) file.AlbumArtist = template.AlbumArtist;
                 if (!string.IsNullOrEmpty(template.Genre)) file.Genre = template.Genre;
                 if (template.Year > 0) file.Year = template.Year;
-                SaveFile(file);
+                
+                var (success, coverArtSaved) = SaveFile(file);
+                if (success) savedFiles++;
+                if (coverArtSaved) coverArtsSaved++;
+            }
+            
+            return (savedFiles, coverArtsSaved);
+        }
+
+        private BitmapImage? LoadAlbumCover(Tag tag)
+        {
+            try
+            {
+                if (tag.Pictures != null && tag.Pictures.Length > 0)
+                {
+                    var picture = tag.Pictures[0]; // Get the first image
+                    if (picture.Data?.Data != null && picture.Data.Count > 0)
+                    {
+                        var bitmapImage = new BitmapImage();
+                        bitmapImage.BeginInit();
+                        bitmapImage.StreamSource = new MemoryStream(picture.Data.Data);
+                        bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
+                        bitmapImage.DecodePixelWidth = 200; // Optimize for display size
+                        bitmapImage.EndInit();
+                        bitmapImage.Freeze(); // Make it cross-thread accessible
+                        return bitmapImage;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error loading album cover: {ex.Message}");
+            }
+            return null;
+        }
+
+        private string GetCoverArtSource(Tag tag, string filePath)
+        {
+            try
+            {
+                // Check for embedded cover art first
+                if (tag.Pictures != null && tag.Pictures.Length > 0)
+                {
+                    return "Embedded in file";
+                }
+
+                // Check for folder-based cover art
+                var folderPath = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(folderPath))
+                {
+                    string[] coverArtNames = {
+                        "folder.jpg", "folder.jpeg", "folder.png",
+                        "cover.jpg", "cover.jpeg", "cover.png",
+                        "front.jpg", "front.jpeg", "front.png",
+                        "albumart.jpg", "albumart.jpeg", "albumart.png",
+                        "album.jpg", "album.jpeg", "album.png"
+                    };
+
+                    foreach (var fileName in coverArtNames)
+                    {
+                        var coverPath = Path.Combine(folderPath, fileName);
+                        if (System.IO.File.Exists(coverPath))
+                        {
+                            return $"Folder file: {fileName}";
+                        }
+                    }
+
+                    // Check for any image files
+                    var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif" };
+                    var imageFiles = Directory.GetFiles(folderPath)
+                        .Where(file => imageExtensions.Contains(Path.GetExtension(file).ToLower()))
+                        .ToArray();
+
+                    if (imageFiles.Length > 0)
+                    {
+                        var firstImage = Path.GetFileName(imageFiles.OrderBy(f => f).First());
+                        return $"Folder file: {firstImage}";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error checking cover art source: {ex.Message}");
+            }
+            return "";
+        }
+
+        public BitmapImage? LoadCoverArtFromFolder(string audioFilePath)
+        {
+            try
+            {
+                var folderPath = Path.GetDirectoryName(audioFilePath);
+                if (string.IsNullOrEmpty(folderPath))
+                    return null;
+
+                // Common cover art filenames in order of preference
+                string[] coverArtNames = {
+                    "folder.jpg", "folder.jpeg", "folder.png",
+                    "cover.jpg", "cover.jpeg", "cover.png",
+                    "front.jpg", "front.jpeg", "front.png",
+                    "albumart.jpg", "albumart.jpeg", "albumart.png",
+                    "album.jpg", "album.jpeg", "album.png",
+                    // Also check for album-specific names
+                };
+
+                // First, try standard names
+                foreach (var fileName in coverArtNames)
+                {
+                    var coverPath = Path.Combine(folderPath, fileName);
+                    if (System.IO.File.Exists(coverPath))
+                    {
+                        return LoadImageFromFile(coverPath);
+                    }
+                }
+
+                // If no standard names found, look for any image files
+                var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif" };
+                var imageFiles = Directory.GetFiles(folderPath)
+                    .Where(file => imageExtensions.Contains(Path.GetExtension(file).ToLower()))
+                    .OrderBy(file => Path.GetFileName(file).ToLower()) // Alphabetical order
+                    .ToArray();
+
+                // Try to find images with album-related keywords
+                var albumKeywords = new[] { "cover", "front", "album", "folder" };
+                foreach (var imageFile in imageFiles)
+                {
+                    var fileName = Path.GetFileNameWithoutExtension(imageFile).ToLower();
+                    if (albumKeywords.Any(keyword => fileName.Contains(keyword)))
+                    {
+                        return LoadImageFromFile(imageFile);
+                    }
+                }
+
+                // If still nothing found, use the first image file (if any)
+                if (imageFiles.Length > 0)
+                {
+                    return LoadImageFromFile(imageFiles[0]);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error loading cover art from folder: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        private BitmapImage? LoadImageFromFile(string imagePath)
+        {
+            try
+            {
+                var bitmapImage = new BitmapImage();
+                bitmapImage.BeginInit();
+                bitmapImage.UriSource = new Uri(imagePath);
+                bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
+                bitmapImage.DecodePixelWidth = 200; // Optimize for display size
+                bitmapImage.EndInit();
+                bitmapImage.Freeze(); // Make it cross-thread accessible
+                return bitmapImage;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error loading image from file {imagePath}: {ex.Message}");
+                return null;
+            }
+        }
+
+        public void RefreshFolderCoverArt(IEnumerable<AudioFileInfo> audioFiles)
+        {
+            // Group files by folder to optimize cover art loading
+            var folderGroups = audioFiles
+                .Where(f => !string.IsNullOrEmpty(f.FilePath))
+                .GroupBy(f => Path.GetDirectoryName(f.FilePath))
+                .Where(g => !string.IsNullOrEmpty(g.Key))
+                .ToList();
+
+            foreach (var folderGroup in folderGroups)
+            {
+                var folderPath = folderGroup.Key!;
+                
+                // Load cover art once per folder for efficiency
+                var folderCoverArt = LoadCoverArtFromFolder(Path.Combine(folderPath, "dummy.mp3"));
+                
+                if (folderCoverArt != null)
+                {
+                    // Determine the cover art source for this folder
+                    string folderCoverSource = GetFolderCoverArtSource(folderPath);
+                    
+                    foreach (var file in folderGroup)
+                    {
+                        // Only update if file doesn't already have embedded cover art
+                        if (file.AlbumCover == null || !file.CoverArtSource.StartsWith("Embedded"))
+                        {
+                            file.AlbumCover = folderCoverArt;
+                            file.CoverArtSource = folderCoverSource;
+                        }
+                    }
+                }
+            }
+        }
+
+        private string GetFolderCoverArtSource(string folderPath)
+        {
+            try
+            {
+                string[] coverArtNames = {
+                    "folder.jpg", "folder.jpeg", "folder.png",
+                    "cover.jpg", "cover.jpeg", "cover.png",
+                    "front.jpg", "front.jpeg", "front.png",
+                    "albumart.jpg", "albumart.jpeg", "albumart.png",
+                    "album.jpg", "album.jpeg", "album.png"
+                };
+
+                foreach (var fileName in coverArtNames)
+                {
+                    var coverPath = Path.Combine(folderPath, fileName);
+                    if (System.IO.File.Exists(coverPath))
+                    {
+                        return $"Folder file: {fileName}";
+                    }
+                }
+
+                // Check for any image files
+                var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif" };
+                var imageFiles = Directory.GetFiles(folderPath)
+                    .Where(file => imageExtensions.Contains(Path.GetExtension(file).ToLower()))
+                    .ToArray();
+
+                if (imageFiles.Length > 0)
+                {
+                    var firstImage = Path.GetFileName(imageFiles.OrderBy(f => f).First());
+                    return $"Folder file: {firstImage}";
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error getting folder cover art source: {ex.Message}");
+            }
+
+            return "";
+        }
+
+        public bool SaveCoverArtToFolder(AudioFileInfo audioFile)
+        {
+            try
+            {
+                // Only save cover art if it's from an online source (not embedded or already from folder)
+                if (audioFile.AlbumCover == null || 
+                    audioFile.CoverArtSource == "Embedded in file" || 
+                    audioFile.CoverArtSource.StartsWith("Folder file:") ||
+                    string.IsNullOrEmpty(audioFile.CoverArtSource))
+                    return false;
+
+                var folderPath = Path.GetDirectoryName(audioFile.FilePath);
+                if (string.IsNullOrEmpty(folderPath))
+                    return false;
+
+                // Create filename for cover art
+                string coverFileName = GetCoverArtFileName(audioFile);
+                string coverFilePath = Path.Combine(folderPath, coverFileName);
+
+                // Don't overwrite if file already exists
+                if (System.IO.File.Exists(coverFilePath))
+                {
+                    System.Diagnostics.Debug.WriteLine($"Cover art file already exists: {coverFilePath}");
+                    return false;
+                }
+
+                // Convert BitmapImage to byte array and save
+                byte[]? imageBytes = BitmapImageToByteArray(audioFile.AlbumCover);
+                if (imageBytes != null && imageBytes.Length > 0)
+                {
+                    System.IO.File.WriteAllBytes(coverFilePath, imageBytes);
+                    System.Diagnostics.Debug.WriteLine($"Saved cover art to: {coverFilePath} (Source: {audioFile.CoverArtSource})");
+                    return true;
+                }
+                
+                return false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error saving cover art to folder: {ex.Message}");
+                return false;
+            }
+        }
+
+        private string GetCoverArtFileName(AudioFileInfo audioFile)
+        {
+            // Check for existing cover art files with common names first
+            var folderPath = Path.GetDirectoryName(audioFile.FilePath);
+            if (!string.IsNullOrEmpty(folderPath))
+            {
+                string[] commonNames = { "folder.jpg", "cover.jpg", "front.jpg", "albumart.jpg" };
+                
+                foreach (var name in commonNames)
+                {
+                    if (!System.IO.File.Exists(Path.Combine(folderPath, name)))
+                    {
+                        return name; // Use the first available common name
+                    }
+                }
+            }
+
+            // If all common names exist, try album-specific name
+            if (!string.IsNullOrEmpty(audioFile.Album))
+            {
+                string safeName = SanitizeFileName(audioFile.Album);
+                return $"{safeName}.jpg";
+            }
+            
+            // Last resort: use timestamp to avoid conflicts
+            return $"cover_{DateTime.Now:yyyyMMdd_HHmmss}.jpg";
+        }
+
+        private string SanitizeFileName(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName))
+                return "cover";
+
+            // Remove invalid filename characters
+            char[] invalidChars = Path.GetInvalidFileNameChars();
+            string sanitized = new string(fileName.Where(c => !invalidChars.Contains(c)).ToArray());
+            
+            // Replace spaces with underscores and limit length
+            sanitized = sanitized.Replace(' ', '_');
+            if (sanitized.Length > 50)
+                sanitized = sanitized[..50];
+                
+            return string.IsNullOrEmpty(sanitized) ? "cover" : sanitized;
+        }
+
+        private byte[]? BitmapImageToByteArray(System.Windows.Media.Imaging.BitmapImage? bitmapImage)
+        {
+            if (bitmapImage == null)
+                return null;
+
+            try
+            {
+                // Try to get the original source stream if available
+                if (bitmapImage.StreamSource != null && bitmapImage.StreamSource.CanRead)
+                {
+                    bitmapImage.StreamSource.Position = 0;
+                    using var memoryStream = new MemoryStream();
+                    bitmapImage.StreamSource.CopyTo(memoryStream);
+                    return memoryStream.ToArray();
+                }
+
+                // Fallback: encode as JPEG
+                var encoder = new System.Windows.Media.Imaging.JpegBitmapEncoder();
+                encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmapImage));
+                
+                using var stream = new MemoryStream();
+                encoder.Save(stream);
+                return stream.ToArray();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error converting bitmap to byte array: {ex.Message}");
+                return null;
             }
         }
     }

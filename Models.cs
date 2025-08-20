@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Windows.Media.Imaging;
 
 namespace TID3
 {
@@ -19,6 +20,8 @@ namespace TID3
         private string _albumArtist = "";
         private string _comment = "";
         private string _matchScore = "";
+        private BitmapImage? _albumCover;
+        private string _coverArtSource = "";
 
         public string FilePath { get; set; } = "";
         public string FileName => System.IO.Path.GetFileName(FilePath);
@@ -80,6 +83,18 @@ namespace TID3
             set { _comment = value; OnPropertyChanged(); }
         }
 
+        public BitmapImage? AlbumCover
+        {
+            get => _albumCover;
+            set { _albumCover = value; OnPropertyChanged(); }
+        }
+
+        public string CoverArtSource
+        {
+            get => _coverArtSource;
+            set { _coverArtSource = value; OnPropertyChanged(); }
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
         {
@@ -96,6 +111,8 @@ namespace TID3
         public int Score { get; set; }
         public int TrackCount { get; set; } = 0;
         public List<MusicBrainzTrack> Tracks { get; set; } = new List<MusicBrainzTrack>();
+        public string? CoverArtUrl { get; set; }
+        public BitmapImage? CoverArtImage { get; set; }
     }
 
     public class MusicBrainzTrack
@@ -115,6 +132,8 @@ namespace TID3
         public string Genre { get; set; } = "";
         public int TrackCount { get; set; } = 0;
         public List<DiscogsTrack> Tracklist { get; set; } = new List<DiscogsTrack>();
+        public string? CoverArtUrl { get; set; }
+        public BitmapImage? CoverArtImage { get; set; }
     }
 
     public class DiscogsTrack
@@ -192,5 +211,59 @@ namespace TID3
         public bool IsTrack => Item is AudioFileInfo;
         public AlbumGroup? AsAlbumGroup => Item as AlbumGroup;
         public AudioFileInfo? AsTrack => Item as AudioFileInfo;
+    }
+
+    public class FileOnlineSourceCache
+    {
+        public string FilePath { get; set; } = "";
+        public List<OnlineSourceItem> OnlineSourceResults { get; set; } = new List<OnlineSourceItem>();
+        public DateTime LastUpdated { get; set; } = DateTime.Now;
+    }
+
+    public class OnlineSourceCacheManager
+    {
+        private readonly Dictionary<string, FileOnlineSourceCache> _cache = new();
+
+        public void StoreResults(string filePath, List<OnlineSourceItem> results)
+        {
+            _cache[filePath] = new FileOnlineSourceCache
+            {
+                FilePath = filePath,
+                OnlineSourceResults = results.ToList(),
+                LastUpdated = DateTime.Now
+            };
+        }
+
+        public List<OnlineSourceItem> GetResults(string filePath)
+        {
+            return _cache.TryGetValue(filePath, out var cache) ? 
+                cache.OnlineSourceResults.ToList() : 
+                new List<OnlineSourceItem>();
+        }
+
+        public bool HasCachedResults(string filePath)
+        {
+            return _cache.ContainsKey(filePath) && _cache[filePath].OnlineSourceResults.Count > 0;
+        }
+
+        public void ClearResultsForFile(string filePath)
+        {
+            _cache.Remove(filePath);
+        }
+
+        public void ClearAllResults()
+        {
+            _cache.Clear();
+        }
+
+        public IEnumerable<string> GetCachedFilePaths()
+        {
+            return _cache.Keys.ToList();
+        }
+
+        public int GetTotalCachedCount()
+        {
+            return _cache.Values.Sum(cache => cache.OnlineSourceResults.Count);
+        }
     }
 }
