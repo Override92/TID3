@@ -70,15 +70,21 @@
 ## 📊 Project Status
 
 ### ✅ Completed Features
-- [x] Core tag editing functionality
-- [x] Multi-format audio file support
-- [x] **Audio fingerprinting with AcoustID/Chromaprint**
-- [x] MusicBrainz API integration
-- [x] Discogs API integration
-- [x] Advanced matching algorithm
-- [x] Tag comparison system with change tracking
-- [x] Windows 11 modern UI design
-- [x] Settings management
+- ✅ Core tag editing functionality
+- ✅ Multi-format audio file support
+- ✅ **Audio fingerprinting with AcoustID/Chromaprint**
+- ✅ MusicBrainz API integration
+- ✅ Discogs API integration
+- ✅ Advanced matching algorithm
+- ✅ Tag comparison system with change tracking
+- ✅ Windows 11 modern UI design
+- ✅ Settings management
+- ✅ **Album cover management system**
+  - Local vs online cover source selection
+  - Resolution indicator display
+- ✅ **Enhanced batch editing capabilities**
+  - Batch cover source selection
+  - Unified cover management across single and batch modes
 
 ### 🔧 Technical Implementation
 - **Architecture**: MVVM pattern with nullable reference types

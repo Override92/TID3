@@ -32,9 +32,9 @@ namespace TID3.Services
         {
             try
             {
-                var response = await _httpClient.GetAsync(GITHUB_API_URL);
+                var response = await _httpClient.SafeGetAsync(GITHUB_API_URL);
                 
-                if (!response.IsSuccessStatusCode)
+                if (response == null || !response.IsSuccessStatusCode)
                 {
                     return null;
                 }

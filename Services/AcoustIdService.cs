@@ -318,6 +318,12 @@ namespace TID3.Services
                 ]);
 
                 var response = await _httpClient.PostAsync(url, content);
+                
+                if (response == null)
+                {
+                    throw new InvalidOperationException("Unable to connect to AcoustID service. Please check your internet connection.");
+                }
+
                 var jsonResponse = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)
@@ -337,6 +343,16 @@ namespace TID3.Services
                 }
 
                 return await ProcessAcoustIdResponse(apiResponse, duration);
+            }
+            catch (HttpRequestException ex)
+            {
+                var friendlyMessage = HttpClientManager.GetFriendlyErrorMessage(ex);
+                throw new InvalidOperationException($"AcoustID lookup failed: {friendlyMessage}", ex);
+            }
+            catch (TaskCanceledException ex)
+            {
+                var friendlyMessage = HttpClientManager.GetFriendlyErrorMessage(ex);
+                throw new InvalidOperationException($"AcoustID lookup failed: {friendlyMessage}", ex);
             }
             catch (Exception ex)
             {
@@ -420,13 +436,10 @@ namespace TID3.Services
             {
                 var url = $"https://musicbrainz.org/ws/2/recording/{recordingId}?fmt=json&inc=releases";
                 
-                using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Add("User-Agent", "TID3/1.0 (contact@example.com)");
+                var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0 (contact@example.com)");
+                var response = await client.SafeGetAsync(url, maxRetries: 2, delayMs: 500);
                 
-                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
-                var response = await _httpClient.SendAsync(request, cts.Token);
-                
-                if (!response.IsSuccessStatusCode)
+                if (response == null || !response.IsSuccessStatusCode)
                     return null;
                 
                 var jsonResponse = await response.Content.ReadAsStringAsync();
@@ -619,6 +632,10 @@ namespace TID3.Services
                 ]);
 
                 var response = await _httpClient.PostAsync(url, content);
+                
+                if (response == null)
+                    return false;
+
                 var jsonResponse = await response.Content.ReadAsStringAsync();
 
                 // Check if the response indicates a valid API key

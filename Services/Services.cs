@@ -174,8 +174,8 @@ namespace TID3.Services
                 
             try
             {
-                var response = await _client.GetAsync(imageUrl);
-                if (response.IsSuccessStatusCode)
+                var response = await _client.SafeGetAsync(imageUrl);
+                if (response?.IsSuccessStatusCode == true)
                 {
                     var imageData = await response.Content.ReadAsByteArrayAsync();
                     var bitmapImage = new BitmapImage();
@@ -661,39 +661,6 @@ namespace TID3.Services
             return null;
         }
 
-        private BitmapImage? LoadCoverArtFromFolder(string filePath)
-        {
-            try
-            {
-                var directory = Path.GetDirectoryName(filePath);
-                if (directory == null) return null;
-
-                // Look for common album cover filenames
-                var coverFiles = new[] { "cover.jpg", "cover.png", "folder.jpg", "folder.png", 
-                                       "album.jpg", "album.png", "albumart.jpg", "albumart.png" };
-
-                foreach (var coverFile in coverFiles)
-                {
-                    var coverPath = Path.Combine(directory, coverFile);
-                    if (File.Exists(coverPath))
-                    {
-                        var bitmapImage = new BitmapImage();
-                        bitmapImage.BeginInit();
-                        bitmapImage.UriSource = new Uri(coverPath);
-                        bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
-                        bitmapImage.DecodePixelWidth = 200; // Optimize for display size
-                        bitmapImage.EndInit();
-                        bitmapImage.Freeze(); // Make it cross-thread accessible
-                        return bitmapImage;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error loading folder cover art: {ex.Message}");
-            }
-            return null;
-        }
 
         private string GetCoverArtSource(Tag tag, string filePath)
         {
@@ -722,7 +689,7 @@ namespace TID3.Services
                         var coverPath = Path.Combine(folderPath, fileName);
                         if (System.IO.File.Exists(coverPath))
                         {
-                            return $"Folder file: {fileName}";
+                            return $"Local file: {fileName}";
                         }
                     }
 

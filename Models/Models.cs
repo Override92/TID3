@@ -9,6 +9,13 @@ using System.Windows.Media.Imaging;
 
 namespace TID3.Models
 {
+    public class CoverSource
+    {
+        public string Name { get; set; } = "";
+        public BitmapImage? Image { get; set; }
+        public string Source { get; set; } = "";
+        public string Resolution => Image != null ? $"{Image.PixelWidth} × {Image.PixelHeight}" : "";
+    }
     public partial class AudioFileInfo : INotifyPropertyChanged
     {
         private string _title = "";
@@ -26,6 +33,8 @@ namespace TID3.Models
         private BitmapImage? _onlineCover;
         private string _coverResolution = "";
         private bool _useLocalCover = true;
+        private string _selectedCoverSource = "";
+        private readonly ObservableCollection<CoverSource> _availableCovers = new();
 
         public string FilePath { get; set; } = "";
         public string FileName => System.IO.Path.GetFileName(FilePath);
@@ -127,25 +136,134 @@ namespace TID3.Models
         public bool HasOnlineCover => OnlineCover != null;
         public bool HasMultipleCovers => HasLocalCover && HasOnlineCover;
 
+        public ObservableCollection<CoverSource> AvailableCovers => _availableCovers;
+
+        public string SelectedCoverSource
+        {
+            get => _selectedCoverSource;
+            set 
+            { 
+                if (_selectedCoverSource != value)
+                {
+                    _selectedCoverSource = value; 
+                    OnPropertyChanged(); 
+                    UpdateActiveCoverFromSelection();
+                }
+            }
+        }
+
+        public bool HasMultipleCoverSources => _availableCovers.Count > 1;
+
         private void UpdateActiveCover()
         {
+            UpdateAvailableCovers();
             if (UseLocalCover && LocalCover != null)
             {
                 AlbumCover = LocalCover;
                 CoverArtSource = "Local File";
                 UpdateCoverResolution(LocalCover);
+                var localSourceName = _availableCovers.FirstOrDefault(c => c.Name == "Local")?.Name ?? "";
+                if (_selectedCoverSource != localSourceName)
+                {
+                    _selectedCoverSource = localSourceName;
+                    OnPropertyChanged(nameof(SelectedCoverSource));
+                }
             }
             else if (OnlineCover != null)
             {
                 AlbumCover = OnlineCover;
                 CoverArtSource = "Online Source";
                 UpdateCoverResolution(OnlineCover);
+                var onlineSourceName = _availableCovers.FirstOrDefault(c => c.Name != "Local")?.Name ?? "";
+                if (_selectedCoverSource != onlineSourceName)
+                {
+                    _selectedCoverSource = onlineSourceName;
+                    OnPropertyChanged(nameof(SelectedCoverSource));
+                }
             }
             else
             {
                 AlbumCover = null;
                 CoverArtSource = "";
                 CoverResolution = "";
+                if (_selectedCoverSource != "")
+                {
+                    _selectedCoverSource = "";
+                    OnPropertyChanged(nameof(SelectedCoverSource));
+                }
+            }
+        }
+
+        private void UpdateActiveCoverFromSelection()
+        {
+            var selectedCover = _availableCovers.FirstOrDefault(c => c.Name == _selectedCoverSource);
+            if (selectedCover?.Image != null)
+            {
+                AlbumCover = selectedCover.Image;
+                CoverArtSource = selectedCover.Source;
+                UpdateCoverResolution(selectedCover.Image);
+            }
+        }
+
+        private void UpdateAvailableCovers()
+        {
+            _availableCovers.Clear();
+            
+            if (LocalCover != null)
+            {
+                _availableCovers.Add(new CoverSource
+                {
+                    Name = "Local",
+                    Image = LocalCover,
+                    Source = "Local File"
+                });
+            }
+            
+            if (OnlineCover != null)
+            {
+                _availableCovers.Add(new CoverSource
+                {
+                    Name = "Online",
+                    Image = OnlineCover,
+                    Source = "Online Source"
+                });
+            }
+            
+            OnPropertyChanged(nameof(HasMultipleCoverSources));
+        }
+
+        public void AddOnlineCover(string sourceName, BitmapImage coverImage, string sourceDescription)
+        {
+            // Remove existing online covers (non-local) and add the new one
+            var localCover = _availableCovers.FirstOrDefault(c => c.Name == "Local");
+            _availableCovers.Clear();
+            
+            if (localCover != null)
+            {
+                _availableCovers.Add(localCover);
+            }
+            
+            // Add the new online cover
+            _availableCovers.Add(new CoverSource
+            {
+                Name = sourceName,
+                Image = coverImage,
+                Source = sourceDescription
+            });
+            
+            OnPropertyChanged(nameof(HasMultipleCoverSources));
+            OnPropertyChanged(nameof(AvailableCovers));
+            
+            // Update OnlineCover for backward compatibility and set as active if no local cover is selected
+            OnlineCover = coverImage;
+            if (LocalCover == null || !UseLocalCover)
+            {
+                if (_selectedCoverSource != sourceName)
+                {
+                    _selectedCoverSource = sourceName;
+                    OnPropertyChanged(nameof(SelectedCoverSource));
+                    UpdateActiveCoverFromSelection();
+                }
             }
         }
 

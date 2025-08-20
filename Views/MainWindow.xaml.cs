@@ -108,6 +108,8 @@ namespace TID3.Views
         private readonly ObservableCollection<AudioFileInfo> _audioFiles;
         private readonly ObservableCollection<OnlineSourceItem> _onlineSourceItems;
         private readonly ObservableCollection<AlbumGroup> _hierarchicalItems;
+        private readonly ObservableCollection<CoverSource> _batchAvailableCovers = new();
+        private string _selectedBatchCoverSource = "";
 
         public ObservableCollection<AudioFileInfo> AudioFiles => _audioFiles;
         public ObservableCollection<OnlineSourceItem> OnlineSourceItems => _onlineSourceItems;
@@ -550,58 +552,6 @@ namespace TID3.Views
             }
         }
 
-        private async void RefreshCoverArt_Click(object sender, RoutedEventArgs e)
-        {
-            if (!_audioFiles.Any())
-            {
-                MessageBox.Show("No files loaded. Please load some audio files first.", "No Files", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-
-            try
-            {
-                // Show progress
-                Title = "TID3 - Scanning for cover art files...";
-                UpdateStatus("Scanning folders for cover art files...");
-
-                // Count files before refresh
-                var beforeCount = _audioFiles.Count(f => f.AlbumCover != null);
-
-                await Task.Run(() => {
-                    _tagService.RefreshFolderCoverArt(_audioFiles);
-                });
-
-                // Count files after refresh
-                var afterCount = _audioFiles.Count(f => f.AlbumCover != null);
-                var newCoverArts = afterCount - beforeCount;
-
-                // Reset title
-                Title = "TID3 - Advanced ID3 Tag Editor";
-
-                // Update status with results
-                string message;
-                if (newCoverArts > 0)
-                {
-                    message = $"Cover art refresh completed. Found {newCoverArts} new cover art files. Total: {afterCount} files with cover art.";
-                    UpdateStatus(message);
-                    MessageBox.Show($"Found {newCoverArts} new cover art files!", "Cover Art Found", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-                else
-                {
-                    message = $"Cover art refresh completed. No new cover art files found. Total: {afterCount} files with cover art.";
-                    UpdateStatus(message);
-                    MessageBox.Show("No new cover art files found in the loaded folders.", "Refresh Complete", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-
-                // Refresh batch cover display if needed
-                UpdateBatchAlbumCover();
-            }
-            catch (Exception ex)
-            {
-                Title = "TID3 - Advanced ID3 Tag Editor";
-                MessageBox.Show($"Error refreshing cover art: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
 
         private void SaveSelected_Click(object sender, RoutedEventArgs e)
         {
@@ -875,63 +825,110 @@ namespace TID3.Views
         {
             try
             {
-                // Check if all tracks in the album have the same cover
-                var albumCovers = albumGroup.Tracks
-                    .Where(track => track.AlbumCover != null)
-                    .Select(track => track.AlbumCover)
-                    .Distinct()
-                    .ToList();
+                // Collect all available cover sources from all tracks
+                PopulateBatchCoverSources(albumGroup.Tracks.ToList());
+                
+                // Update the display
+                UpdateBatchAlbumCoverDisplay();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error updating batch album cover: {ex.Message}");
+                BatchAlbumCoverImage.Source = null;
+                BatchAlbumCoverText.Text = "Error Loading Cover";
+                BatchAlbumCoverText.Visibility = Visibility.Visible;
+                BatchCoverSourceComboBox.Visibility = Visibility.Collapsed;
+            }
+        }
 
-                // Check cover art sources
-                var coverSources = albumGroup.Tracks
-                    .Where(track => !string.IsNullOrEmpty(track.CoverArtSource))
-                    .Select(track => track.CoverArtSource)
-                    .Distinct()
-                    .ToList();
+        private void PopulateBatchCoverSources(List<AudioFileInfo> tracks)
+        {
+            _batchAvailableCovers.Clear();
+            var coverSourceMap = new Dictionary<string, CoverSource>();
 
-                if (albumCovers.Count == 1)
+            foreach (var track in tracks)
+            {
+                foreach (var coverSource in track.AvailableCovers)
                 {
-                    // All tracks have the same cover (or only one track has a cover)
-                    BatchAlbumCoverImage.Source = albumCovers.First();
-                    BatchAlbumCoverText.Visibility = Visibility.Collapsed;
-                    
-                    // Show cover art source
-                    if (coverSources.Count == 1)
+                    if (!coverSourceMap.ContainsKey(coverSource.Name))
                     {
-                        BatchCoverArtSourceText.Text = coverSources.First();
-                        BatchCoverArtSourceText.Visibility = Visibility.Visible;
-                    }
-                    else if (coverSources.Count > 1)
-                    {
-                        BatchCoverArtSourceText.Text = "Multiple sources";
-                        BatchCoverArtSourceText.Visibility = Visibility.Visible;
-                    }
-                    else
-                    {
-                        BatchCoverArtSourceText.Visibility = Visibility.Collapsed;
+                        coverSourceMap[coverSource.Name] = new CoverSource
+                        {
+                            Name = coverSource.Name,
+                            Image = coverSource.Image,
+                            Source = coverSource.Source
+                        };
                     }
                 }
-                else if (albumCovers.Count > 1)
+            }
+
+            foreach (var coverSource in coverSourceMap.Values)
+            {
+                _batchAvailableCovers.Add(coverSource);
+            }
+
+            // Set up ComboBox
+            BatchCoverSourceComboBox.ItemsSource = _batchAvailableCovers;
+            
+            // Select first available source if none is selected
+            if (string.IsNullOrEmpty(_selectedBatchCoverSource) && _batchAvailableCovers.Count > 0)
+            {
+                _selectedBatchCoverSource = _batchAvailableCovers.First().Name;
+            }
+
+            // Set selected item
+            var selectedCover = _batchAvailableCovers.FirstOrDefault(c => c.Name == _selectedBatchCoverSource);
+            if (selectedCover != null)
+            {
+                BatchCoverSourceComboBox.SelectedItem = selectedCover;
+            }
+
+            // Show/hide ComboBox based on availability
+            BatchCoverSourceComboBox.Visibility = _batchAvailableCovers.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void UpdateBatchAlbumCoverDisplay()
+        {
+            try
+            {
+                var selectedCover = _batchAvailableCovers.FirstOrDefault(c => c.Name == _selectedBatchCoverSource);
+                
+                if (selectedCover?.Image != null)
                 {
-                    // Multiple different covers
+                    // Show the selected cover
+                    BatchAlbumCoverImage.Source = selectedCover.Image;
+                    BatchAlbumCoverText.Visibility = Visibility.Collapsed;
+                    
+                    // Show resolution
+                    BatchCoverResolutionText.Text = selectedCover.Resolution;
+                    BatchCoverResolutionText.Visibility = !string.IsNullOrEmpty(selectedCover.Resolution) ? Visibility.Visible : Visibility.Collapsed;
+                    
+                    // Show source
+                    BatchCoverArtSourceText.Text = selectedCover.Source;
+                    BatchCoverArtSourceText.Visibility = !string.IsNullOrEmpty(selectedCover.Source) ? Visibility.Visible : Visibility.Collapsed;
+                }
+                else if (_batchAvailableCovers.Count > 0)
+                {
+                    // Has covers but none selected
                     BatchAlbumCoverImage.Source = null;
-                    BatchAlbumCoverText.Text = "Multiple Covers";
+                    BatchAlbumCoverText.Text = "Select Cover Source";
                     BatchAlbumCoverText.Visibility = Visibility.Visible;
-                    BatchCoverArtSourceText.Text = "Multiple sources";
-                    BatchCoverArtSourceText.Visibility = Visibility.Visible;
+                    BatchCoverResolutionText.Visibility = Visibility.Collapsed;
+                    BatchCoverArtSourceText.Visibility = Visibility.Collapsed;
                 }
                 else
                 {
-                    // No covers found
+                    // No covers available
                     BatchAlbumCoverImage.Source = null;
                     BatchAlbumCoverText.Text = "No Album Cover";
                     BatchAlbumCoverText.Visibility = Visibility.Visible;
+                    BatchCoverResolutionText.Visibility = Visibility.Collapsed;
                     BatchCoverArtSourceText.Visibility = Visibility.Collapsed;
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error updating batch album cover: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Error updating batch cover display: {ex.Message}");
                 BatchAlbumCoverImage.Source = null;
                 BatchAlbumCoverText.Text = "Error Loading Cover";
                 BatchAlbumCoverText.Visibility = Visibility.Visible;
@@ -945,6 +942,13 @@ namespace TID3.Views
                 BatchAlbumCoverImage.Source = null;
                 BatchAlbumCoverText.Text = "No Common Cover";
                 BatchAlbumCoverText.Visibility = Visibility.Visible;
+                BatchCoverResolutionText.Visibility = Visibility.Collapsed;
+                BatchCoverArtSourceText.Visibility = Visibility.Collapsed;
+                BatchCoverSourceComboBox.Visibility = Visibility.Collapsed;
+                
+                // Clear batch cover sources
+                _batchAvailableCovers.Clear();
+                _selectedBatchCoverSource = "";
                 
                 // Also clear batch field values
                 ClearBatchFieldValues();
@@ -1286,18 +1290,26 @@ namespace TID3.Views
             }
         }
 
-        private void CoverSourceChanged_Click(object sender, RoutedEventArgs e)
+        private void CoverSourceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (SelectedFile == null) return;
 
-            var radioButton = sender as RadioButton;
-            if (radioButton?.Name == "LocalCoverRadio")
+            var comboBox = sender as ComboBox;
+            var selectedCover = comboBox?.SelectedItem as CoverSource;
+            if (selectedCover != null)
             {
-                SelectedFile.UseLocalCover = true;
+                SelectedFile.SelectedCoverSource = selectedCover.Name;
             }
-            else if (radioButton?.Name == "OnlineCoverRadio")
+        }
+
+        private void BatchCoverSourceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var comboBox = sender as ComboBox;
+            var selectedCover = comboBox?.SelectedItem as CoverSource;
+            if (selectedCover != null)
             {
-                SelectedFile.UseLocalCover = false;
+                _selectedBatchCoverSource = selectedCover.Name;
+                UpdateBatchAlbumCoverDisplay();
             }
         }
 
@@ -1507,8 +1519,8 @@ namespace TID3.Views
 
                 if (coverImage != null)
                 {
-                    // Update the target file with the new online cover art
-                    targetFile.OnlineCover = coverImage;
+                    // Add the online cover to the available covers collection
+                    targetFile.AddOnlineCover(selectedSource.SourceType, coverImage, coverSource);
                     
                     System.Diagnostics.Debug.WriteLine($"Cover art loaded from {coverSource} for {targetFile.FileName}");
                     
@@ -1641,7 +1653,9 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error searching MusicBrainz: {ex.Message}", "Search Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var friendlyMessage = HttpClientManager.GetFriendlyErrorMessage(ex);
+                MessageBox.Show($"Error searching MusicBrainz: {friendlyMessage}", "Network Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                UpdateStatus("MusicBrainz search failed due to network error");
             }
         }
 
@@ -1793,7 +1807,9 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error during fingerprinting: {ex.Message}", "Fingerprint Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var friendlyMessage = HttpClientManager.GetFriendlyErrorMessage(ex);
+                MessageBox.Show($"Error during fingerprinting: {friendlyMessage}", "Network Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                UpdateStatus("Fingerprinting failed due to network error");
             }
         }
 
@@ -1898,7 +1914,9 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error searching Discogs: {ex.Message}", "Search Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var friendlyMessage = HttpClientManager.GetFriendlyErrorMessage(ex);
+                MessageBox.Show($"Error searching Discogs: {friendlyMessage}", "Network Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                UpdateStatus("Discogs search failed due to network error");
             }
         }
 

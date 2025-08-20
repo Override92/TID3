@@ -701,13 +701,6 @@
                 </StackPanel>
             </Button>
 
-            <Button Click="RefreshCoverArt_Click" Style="{StaticResource ModernButton}" ToolTip="Scan for cover art files in loaded folders">
-                <StackPanel Orientation="Horizontal">
-                    <Path Width="16" Height="16" Fill="{StaticResource TextBrush}" Stretch="Uniform"
-                          Data="M230,128a102,102,0,0,1-36.16,78.46A6,6,0,0,1,188,198V134a6,6,0,0,1,12,0v51.11A90,90,0,1,0,56,170a6,6,0,0,1-12,0A102,102,0,1,1,230,128ZM196.24,59.76a6,6,0,0,0-8.48,0L166,81.52V24a6,6,0,0,0-12,0V81.52L132.24,59.76a6,6,0,0,0-8.48,8.48L145.52,90,123.76,111.76a6,6,0,1,0,8.48,8.48L154,98.48l21.76,21.76a6,6,0,0,0,8.48-8.48L162.48,90l21.76-21.76A6,6,0,0,0,196.24,59.76Z"/>
-                    <TextBlock Text="Refresh Cover Art" Margin="6,0,0,0" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
 
             <Separator Width="12" Background="Transparent"/>
 
@@ -1245,57 +1238,38 @@
                         </TextBlock>
 
                         <!-- Cover Source Selector -->
-                        <StackPanel Orientation="Horizontal" Margin="0,4,12,0">
-                            <StackPanel.Style>
-                                <Style TargetType="StackPanel">
+                        <ComboBox Name="CoverSourceComboBox"
+                                 ItemsSource="{Binding AvailableCovers}"
+                                 SelectedValue="{Binding SelectedCoverSource}"
+                                 SelectedValuePath="Name"
+                                 MinWidth="200"
+                                 Margin="0,4,12,0"
+                                 SelectionChanged="CoverSourceComboBox_SelectionChanged">
+                            <ComboBox.Style>
+                                <Style TargetType="ComboBox" BasedOn="{StaticResource ModernComboBox}">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding HasMultipleCovers}" Value="True">
+                                        <DataTrigger Binding="{Binding HasMultipleCoverSources}" Value="True">
                                             <Setter Property="Visibility" Value="Visible"/>
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </StackPanel.Style>
-                            
-                            <RadioButton Name="LocalCoverRadio" 
-                                        Content="Local" 
-                                        GroupName="CoverSource"
-                                        IsChecked="{Binding UseLocalCover}"
-                                        Foreground="{StaticResource TextBrush}"
-                                        FontSize="10"
-                                        Margin="0,0,10,0"
-                                        Click="CoverSourceChanged_Click">
-                                <RadioButton.Style>
-                                    <Style TargetType="RadioButton">
-                                        <Setter Property="IsEnabled" Value="False"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding HasLocalCover}" Value="True">
-                                                <Setter Property="IsEnabled" Value="True"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </RadioButton.Style>
-                            </RadioButton>
-                            
-                            <RadioButton Name="OnlineCoverRadio" 
-                                        Content="Online" 
-                                        GroupName="CoverSource"
-                                        IsChecked="{Binding UseLocalCover, Converter={x:Static local:BooleanInverterConverter.Instance}}"
-                                        Foreground="{StaticResource TextBrush}"
-                                        FontSize="10"
-                                        Click="CoverSourceChanged_Click">
-                                <RadioButton.Style>
-                                    <Style TargetType="RadioButton">
-                                        <Setter Property="IsEnabled" Value="False"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding HasOnlineCover}" Value="True">
-                                                <Setter Property="IsEnabled" Value="True"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </RadioButton.Style>
-                            </RadioButton>
-                        </StackPanel>
+                            </ComboBox.Style>
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Width="60" 
+                                                  Foreground="#FFFFFFFF"/>
+                                        <TextBlock Text=" - " Margin="5,0" Foreground="#FFCCCCCC"/>
+                                        <TextBlock Text="{Binding Resolution}" FontSize="9" 
+                                                  Foreground="#FFCCCCCC"/>
+                                        <TextBlock Text=" - " Margin="5,0" Foreground="#FFCCCCCC"/>
+                                        <TextBlock Text="{Binding Source}" FontSize="9" 
+                                                  Foreground="#FFCCCCCC"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
 
                         <!-- Cover Art Source Info -->
                         <TextBlock Text="{Binding CoverArtSource}" 
@@ -1388,12 +1362,48 @@
                             </Grid>
                         </Border>
                         
+                        <!-- Batch Cover Resolution -->
+                        <TextBlock Name="BatchCoverResolutionText" Text="" 
+                                  Foreground="{StaticResource SubTextBrush}"
+                                  HorizontalAlignment="Left" 
+                                  FontSize="10"
+                                  Margin="0,4,12,2"
+                                  MaxWidth="150"
+                                  TextWrapping="Wrap"
+                                  Visibility="Collapsed"/>
+                        
+                        <!-- Batch Cover Source Selector -->
+                        <ComboBox Name="BatchCoverSourceComboBox"
+                                 MinWidth="150"
+                                 Margin="0,4,12,4"
+                                 SelectionChanged="BatchCoverSourceComboBox_SelectionChanged"
+                                 Visibility="Collapsed">
+                            <ComboBox.Style>
+                                <Style TargetType="ComboBox" BasedOn="{StaticResource ModernComboBox}">
+                                </Style>
+                            </ComboBox.Style>
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Width="50" 
+                                                  Foreground="#FFFFFFFF"/>
+                                        <TextBlock Text=" - " Margin="3,0" Foreground="#FFCCCCCC"/>
+                                        <TextBlock Text="{Binding Resolution}" FontSize="9" 
+                                                  Foreground="#FFCCCCCC"/>
+                                        <TextBlock Text=" - " Margin="3,0" Foreground="#FFCCCCCC"/>
+                                        <TextBlock Text="{Binding Source}" FontSize="9" 
+                                                  Foreground="#FFCCCCCC"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        
                         <!-- Batch Cover Art Source -->
                         <TextBlock Name="BatchCoverArtSourceText" Text="" 
                                   Foreground="{StaticResource SubTextBrush}"
                                   HorizontalAlignment="Left" 
-                                  FontSize="10"
-                                  Margin="0,4,12,8"
+                                  FontSize="9"
+                                  Margin="0,2,12,8"
                                   MaxWidth="150"
                                   TextWrapping="Wrap"
                                   Visibility="Collapsed"/>
