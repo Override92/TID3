@@ -19,9 +19,33 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Markup;
 using Microsoft.Win32;
+using TID3.Models;
+using TID3.Services;
+using TID3.Utils;
+using System.Globalization;
+using System.Windows.Data;
 
-namespace TID3
+namespace TID3.Views
 {
+    public class BooleanInverterConverter : IValueConverter
+    {
+        public static BooleanInverterConverter Instance { get; } = new BooleanInverterConverter();
+        
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is bool boolValue)
+                return !boolValue;
+            return false;
+        }
+        
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is bool boolValue)
+                return !boolValue;
+            return true;
+        }
+    }
+
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
@@ -1262,6 +1286,21 @@ namespace TID3
             }
         }
 
+        private void CoverSourceChanged_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedFile == null) return;
+
+            var radioButton = sender as RadioButton;
+            if (radioButton?.Name == "LocalCoverRadio")
+            {
+                SelectedFile.UseLocalCover = true;
+            }
+            else if (radioButton?.Name == "OnlineCoverRadio")
+            {
+                SelectedFile.UseLocalCover = false;
+            }
+        }
+
         private void UpdateStatus(string message)
         {
             Title = $"TID3 - Advanced ID3 Tag Editor - {message}";
@@ -1468,9 +1507,8 @@ namespace TID3
 
                 if (coverImage != null)
                 {
-                    // Update the target file with the new cover art
-                    targetFile.AlbumCover = coverImage;
-                    targetFile.CoverArtSource = coverSource;
+                    // Update the target file with the new online cover art
+                    targetFile.OnlineCover = coverImage;
                     
                     System.Diagnostics.Debug.WriteLine($"Cover art loaded from {coverSource} for {targetFile.FileName}");
                     

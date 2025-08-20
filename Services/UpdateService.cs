@@ -3,8 +3,10 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using TID3.Models;
+using TID3.Utils;
 
-namespace TID3
+namespace TID3.Services
 {
     public class UpdateInfo
     {

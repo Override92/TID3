@@ -10,8 +10,10 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows.Media.Imaging;
 using TagLib;
+using TID3.Models;
+using TID3.Utils;
 
-namespace TID3
+namespace TID3.Services
 {
     // Compiled regex for track count patterns - optimized for performance
     internal static class RegexPatterns
@@ -531,7 +533,7 @@ namespace TID3
                     Duration = FormatDuration(properties.Duration),
                     Bitrate = FormatBitrate(properties.AudioBitrate),
                     FileSize = FormatFileSize(new FileInfo(filePath).Length),
-                    AlbumCover = LoadAlbumCover(tag) ?? LoadCoverArtFromFolder(filePath),
+                    LocalCover = LoadAlbumCover(tag) ?? LoadCoverArtFromFolder(filePath),
                     CoverArtSource = GetCoverArtSource(tag, filePath)
                 };
                 return audioFile;
@@ -655,6 +657,40 @@ namespace TID3
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error loading album cover: {ex.Message}");
+            }
+            return null;
+        }
+
+        private BitmapImage? LoadCoverArtFromFolder(string filePath)
+        {
+            try
+            {
+                var directory = Path.GetDirectoryName(filePath);
+                if (directory == null) return null;
+
+                // Look for common album cover filenames
+                var coverFiles = new[] { "cover.jpg", "cover.png", "folder.jpg", "folder.png", 
+                                       "album.jpg", "album.png", "albumart.jpg", "albumart.png" };
+
+                foreach (var coverFile in coverFiles)
+                {
+                    var coverPath = Path.Combine(directory, coverFile);
+                    if (File.Exists(coverPath))
+                    {
+                        var bitmapImage = new BitmapImage();
+                        bitmapImage.BeginInit();
+                        bitmapImage.UriSource = new Uri(coverPath);
+                        bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
+                        bitmapImage.DecodePixelWidth = 200; // Optimize for display size
+                        bitmapImage.EndInit();
+                        bitmapImage.Freeze(); // Make it cross-thread accessible
+                        return bitmapImage;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error loading folder cover art: {ex.Message}");
             }
             return null;
         }

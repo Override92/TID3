@@ -10,8 +10,10 @@ using System.Text.Json.Serialization;
 using System.Text;
 using TagLib;
 using NAudio.Wave;
+using TID3.Models;
+using TID3.Utils;
 
-namespace TID3
+namespace TID3.Services
 {
     public class AcoustIdResult
     {

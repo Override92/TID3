@@ -9,8 +9,11 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Navigation;
 using Microsoft.Win32;
+using TID3.Models;
+using TID3.Services;
+using TID3.Utils;
 
-namespace TID3
+namespace TID3.Views
 {
     /// <summary>
     /// Interaction logic for SettingsWindow.xaml

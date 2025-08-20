@@ -7,7 +7,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Media.Imaging;
 
-namespace TID3
+namespace TID3.Models
 {
     public partial class AudioFileInfo : INotifyPropertyChanged
     {
@@ -22,6 +22,10 @@ namespace TID3
         private string _matchScore = "";
         private BitmapImage? _albumCover;
         private string _coverArtSource = "";
+        private BitmapImage? _localCover;
+        private BitmapImage? _onlineCover;
+        private string _coverResolution = "";
+        private bool _useLocalCover = true;
 
         public string FilePath { get; set; } = "";
         public string FileName => System.IO.Path.GetFileName(FilePath);
@@ -93,6 +97,68 @@ namespace TID3
         {
             get => _coverArtSource;
             set { _coverArtSource = value; OnPropertyChanged(); }
+        }
+
+        public BitmapImage? LocalCover
+        {
+            get => _localCover;
+            set { _localCover = value; OnPropertyChanged(); UpdateActiveCover(); }
+        }
+
+        public BitmapImage? OnlineCover
+        {
+            get => _onlineCover;
+            set { _onlineCover = value; OnPropertyChanged(); UpdateActiveCover(); }
+        }
+
+        public string CoverResolution
+        {
+            get => _coverResolution;
+            set { _coverResolution = value; OnPropertyChanged(); }
+        }
+
+        public bool UseLocalCover
+        {
+            get => _useLocalCover;
+            set { _useLocalCover = value; OnPropertyChanged(); UpdateActiveCover(); }
+        }
+
+        public bool HasLocalCover => LocalCover != null;
+        public bool HasOnlineCover => OnlineCover != null;
+        public bool HasMultipleCovers => HasLocalCover && HasOnlineCover;
+
+        private void UpdateActiveCover()
+        {
+            if (UseLocalCover && LocalCover != null)
+            {
+                AlbumCover = LocalCover;
+                CoverArtSource = "Local File";
+                UpdateCoverResolution(LocalCover);
+            }
+            else if (OnlineCover != null)
+            {
+                AlbumCover = OnlineCover;
+                CoverArtSource = "Online Source";
+                UpdateCoverResolution(OnlineCover);
+            }
+            else
+            {
+                AlbumCover = null;
+                CoverArtSource = "";
+                CoverResolution = "";
+            }
+        }
+
+        private void UpdateCoverResolution(BitmapImage? image)
+        {
+            if (image != null)
+            {
+                CoverResolution = $"{image.PixelWidth} × {image.PixelHeight}";
+            }
+            else
+            {
+                CoverResolution = "";
+            }
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

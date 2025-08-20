@@ -1,7 +1,7 @@
 using System;
 using System.Net.Http;
 
-namespace TID3
+namespace TID3.Utils
 {
     public static class HttpClientManager
     {

@@ -1,9 +1,10 @@
-<Window x:Class="TID3.MainWindow"
+<Window x:Class="TID3.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:TID3"
+        xmlns:local="clr-namespace:TID3.Views"
+        xmlns:models="clr-namespace:TID3.Models"
         mc:Ignorable="d"
         Title="TID3 - Advanced ID3 Tag Editor" Height="800" Width="1200"
         MinHeight="800" MinWidth="1060"
@@ -959,7 +960,7 @@
                 
                 <TreeView.Resources>
                     <!-- Album Group Template -->
-                    <HierarchicalDataTemplate DataType="{x:Type local:AlbumGroup}" ItemsSource="{Binding Tracks}">
+                    <HierarchicalDataTemplate DataType="{x:Type models:AlbumGroup}" ItemsSource="{Binding Tracks}">
                         <Border Background="{StaticResource PrimaryBrush}" 
                                 CornerRadius="3" 
                                 Padding="8,4" 
@@ -1002,7 +1003,7 @@
                     </HierarchicalDataTemplate>
                     
                     <!-- Track Template -->
-                    <DataTemplate DataType="{x:Type local:AudioFileInfo}">
+                    <DataTemplate DataType="{x:Type models:AudioFileInfo}">
                         <Border Background="{StaticResource BackgroundBrush}" 
                                 CornerRadius="2" 
                                 Padding="0" 
@@ -1220,12 +1221,88 @@
                             </Grid>
                         </Border>
                         
-                        <!-- Cover Art Source -->
-                        <TextBlock Text="{Binding CoverArtSource}" 
+                        <!-- Cover Resolution -->
+                        <TextBlock Text="{Binding CoverResolution}" 
                                   Foreground="{StaticResource SubTextBrush}"
                                   HorizontalAlignment="Left" 
                                   FontSize="10"
                                   Margin="0,4,12,0"
+                                  MaxWidth="200"
+                                  TextWrapping="Wrap">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding CoverResolution}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding CoverResolution}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <!-- Cover Source Selector -->
+                        <StackPanel Orientation="Horizontal" Margin="0,4,12,0">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasMultipleCovers}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            
+                            <RadioButton Name="LocalCoverRadio" 
+                                        Content="Local" 
+                                        GroupName="CoverSource"
+                                        IsChecked="{Binding UseLocalCover}"
+                                        Foreground="{StaticResource TextBrush}"
+                                        FontSize="10"
+                                        Margin="0,0,10,0"
+                                        Click="CoverSourceChanged_Click">
+                                <RadioButton.Style>
+                                    <Style TargetType="RadioButton">
+                                        <Setter Property="IsEnabled" Value="False"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasLocalCover}" Value="True">
+                                                <Setter Property="IsEnabled" Value="True"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </RadioButton.Style>
+                            </RadioButton>
+                            
+                            <RadioButton Name="OnlineCoverRadio" 
+                                        Content="Online" 
+                                        GroupName="CoverSource"
+                                        IsChecked="{Binding UseLocalCover, Converter={x:Static local:BooleanInverterConverter.Instance}}"
+                                        Foreground="{StaticResource TextBrush}"
+                                        FontSize="10"
+                                        Click="CoverSourceChanged_Click">
+                                <RadioButton.Style>
+                                    <Style TargetType="RadioButton">
+                                        <Setter Property="IsEnabled" Value="False"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasOnlineCover}" Value="True">
+                                                <Setter Property="IsEnabled" Value="True"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </RadioButton.Style>
+                            </RadioButton>
+                        </StackPanel>
+
+                        <!-- Cover Art Source Info -->
+                        <TextBlock Text="{Binding CoverArtSource}" 
+                                  Foreground="{StaticResource SubTextBrush}"
+                                  HorizontalAlignment="Left" 
+                                  FontSize="9"
+                                  Margin="0,2,12,0"
                                   MaxWidth="200"
                                   TextWrapping="Wrap">
                             <TextBlock.Style>
