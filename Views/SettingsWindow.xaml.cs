@@ -1,29 +1,67 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Navigation;
 using Microsoft.Win32;
+using TID3.Models;
+using TID3.Services;
+using TID3.Utils;
 
-namespace TID3
+namespace TID3.Views
 {
+    // UI Model for Cover Art Source configuration
+    public class CoverArtSourceViewModel : INotifyPropertyChanged
+    {
+        private bool _isEnabled;
+        private int _priority;
+
+        public CoverSourceType SourceType { get; set; }
+        public string DisplayName { get; set; } = "";
+        
+        public bool IsEnabled
+        {
+            get => _isEnabled;
+            set { _isEnabled = value; OnPropertyChanged(); }
+        }
+        
+        public int Priority
+        {
+            get => _priority;
+            set { _priority = value; OnPropertyChanged(); }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string? name = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+    }
+
     /// <summary>
     /// Interaction logic for SettingsWindow.xaml
     /// </summary>
     public partial class SettingsWindow : Window
     {
         private AppSettings _currentSettings = null!;
+        private ObservableCollection<CoverArtSourceViewModel> _coverArtSources = new();
 
         public SettingsWindow()
         {
             InitializeComponent();
             LoadVersion();
             LoadSettings();
+            InitializeCoverArtSources();
         }
 
         private void LoadVersion()
@@ -65,6 +103,11 @@ namespace TID3
             DiscogsSecretPasswordBox.Password = _currentSettings.DiscogsSecret;
             AcoustIdApiKeyPasswordBox.Password = _currentSettings.AcoustIdApiKey;
 
+            // Cover Art Settings
+            LastFmApiKeyPasswordBox.Password = _currentSettings.CoverArtSettings.LastFmApiKey;
+            SpotifyClientIdPasswordBox.Password = _currentSettings.CoverArtSettings.SpotifyClientId;
+            SpotifyClientSecretPasswordBox.Password = _currentSettings.CoverArtSettings.SpotifyClientSecret;
+
             // File Processing
             AutoSaveCheckBox.IsChecked = _currentSettings.AutoSave;
             CreateBackupCheckBox.IsChecked = _currentSettings.CreateBackup;
@@ -94,6 +137,12 @@ namespace TID3
             _currentSettings.DiscogsApiKey = DiscogsApiKeyPasswordBox.Password;
             _currentSettings.DiscogsSecret = DiscogsSecretPasswordBox.Password;
             _currentSettings.AcoustIdApiKey = AcoustIdApiKeyPasswordBox.Password;
+
+            // Cover Art Settings
+            _currentSettings.CoverArtSettings.LastFmApiKey = LastFmApiKeyPasswordBox.Password;
+            _currentSettings.CoverArtSettings.SpotifyClientId = SpotifyClientIdPasswordBox.Password;
+            _currentSettings.CoverArtSettings.SpotifyClientSecret = SpotifyClientSecretPasswordBox.Password;
+            SaveCoverArtSourceSettings();
 
             // File Processing
             _currentSettings.AutoSave = AutoSaveCheckBox.IsChecked ?? false;
@@ -406,6 +455,264 @@ namespace TID3
             {
                 MessageBox.Show("Failed to check for updates. Please check your internet connection.",
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                button.Content = originalContent;
+                button.IsEnabled = true;
+            }
+        }
+
+        private void InitializeCoverArtSources()
+        {
+            // Create view models for all cover art sources
+            var sourceDisplayNames = new Dictionary<CoverSourceType, string>
+            {
+                { CoverSourceType.Local, "Local Files (Embedded & Folder)" },
+                { CoverSourceType.Spotify, "Spotify (Official Artwork)" },
+                { CoverSourceType.ITunes, "iTunes Store (Apple Music)" },
+                { CoverSourceType.MusicBrainz, "MusicBrainz Cover Art Archive" },
+                { CoverSourceType.Deezer, "Deezer (Music Streaming)" },
+                { CoverSourceType.LastFm, "Last.fm (User Submitted)" },
+                { CoverSourceType.Discogs, "Discogs (User Submitted)" }
+            };
+
+            foreach (var source in sourceDisplayNames)
+            {
+                var viewModel = new CoverArtSourceViewModel
+                {
+                    SourceType = source.Key,
+                    DisplayName = source.Value,
+                    Priority = _currentSettings.CoverArtSettings.GetPriority(source.Key),
+                    IsEnabled = _currentSettings.CoverArtSettings.IsSourceEnabled(source.Key)
+                };
+                _coverArtSources.Add(viewModel);
+            }
+
+            // Sort by priority (highest first)
+            var sortedSources = _coverArtSources.OrderByDescending(s => s.Priority).ToList();
+            _coverArtSources.Clear();
+            foreach (var source in sortedSources)
+            {
+                _coverArtSources.Add(source);
+            }
+
+            // Set ItemsSource
+            CoverArtSourcesList.ItemsSource = _coverArtSources;
+        }
+
+        private void SaveCoverArtSourceSettings()
+        {
+            // Update settings from UI
+            foreach (var source in _coverArtSources)
+            {
+                _currentSettings.CoverArtSettings.SetPriority(source.SourceType, source.Priority);
+                
+                // Update enable/disable settings
+                switch (source.SourceType)
+                {
+                    case CoverSourceType.LastFm:
+                        _currentSettings.CoverArtSettings.EnableLastFm = source.IsEnabled;
+                        break;
+                    case CoverSourceType.Spotify:
+                        _currentSettings.CoverArtSettings.EnableSpotify = source.IsEnabled;
+                        break;
+                    case CoverSourceType.ITunes:
+                        _currentSettings.CoverArtSettings.EnableITunes = source.IsEnabled;
+                        break;
+                    case CoverSourceType.Deezer:
+                        _currentSettings.CoverArtSettings.EnableDeezer = source.IsEnabled;
+                        break;
+                    case CoverSourceType.MusicBrainz:
+                        _currentSettings.CoverArtSettings.EnableMusicBrainz = source.IsEnabled;
+                        break;
+                    case CoverSourceType.Discogs:
+                        _currentSettings.CoverArtSettings.EnableDiscogs = source.IsEnabled;
+                        break;
+                }
+            }
+        }
+
+        private void MoveSourceUp_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is CoverArtSourceViewModel source)
+            {
+                var currentIndex = _coverArtSources.IndexOf(source);
+                if (currentIndex > 0)
+                {
+                    // Swap with item above
+                    var itemAbove = _coverArtSources[currentIndex - 1];
+                    var tempPriority = source.Priority;
+                    source.Priority = itemAbove.Priority;
+                    itemAbove.Priority = tempPriority;
+
+                    // Move in collection
+                    _coverArtSources.Move(currentIndex, currentIndex - 1);
+                }
+            }
+        }
+
+        private void MoveSourceDown_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is CoverArtSourceViewModel source)
+            {
+                var currentIndex = _coverArtSources.IndexOf(source);
+                if (currentIndex < _coverArtSources.Count - 1)
+                {
+                    // Swap with item below
+                    var itemBelow = _coverArtSources[currentIndex + 1];
+                    var tempPriority = source.Priority;
+                    source.Priority = itemBelow.Priority;
+                    itemBelow.Priority = tempPriority;
+
+                    // Move in collection
+                    _coverArtSources.Move(currentIndex, currentIndex + 1);
+                }
+            }
+        }
+
+        private async void TestLastFm_Click(object sender, RoutedEventArgs e)
+        {
+            var button = (Button)sender;
+            var originalContent = button.Content;
+            
+            try
+            {
+                button.Content = "Testing...";
+                button.IsEnabled = false;
+                LastFmTestStatus.Text = "";
+
+                var apiKey = LastFmApiKeyPasswordBox.Password.Trim();
+                
+                if (string.IsNullOrEmpty(apiKey))
+                {
+                    LastFmTestStatus.Text = "Please enter a Last.fm API key first";
+                    LastFmTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(220, 53, 69)); // Red
+                    return;
+                }
+
+                // Test with a well-known album
+                using var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0");
+                var lastFmService = new Services.LastFmService(client, apiKey);
+                
+                var coverUrl = await lastFmService.GetAlbumCoverAsync("The Beatles", "Abbey Road");
+                
+                if (!string.IsNullOrEmpty(coverUrl))
+                {
+                    LastFmTestStatus.Text = "✓ Connection successful!";
+                    LastFmTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(40, 167, 69)); // Green
+                }
+                else
+                {
+                    LastFmTestStatus.Text = "✗ No results found (check API key)";
+                    LastFmTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 193, 7)); // Yellow
+                }
+            }
+            catch (Exception ex)
+            {
+                LastFmTestStatus.Text = $"✗ Error: {ex.Message}";
+                LastFmTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(220, 53, 69)); // Red
+                System.Diagnostics.Debug.WriteLine($"Last.fm test error: {ex}");
+            }
+            finally
+            {
+                button.Content = originalContent;
+                button.IsEnabled = true;
+            }
+        }
+
+        private async void TestSpotify_Click(object sender, RoutedEventArgs e)
+        {
+            var button = (Button)sender;
+            var originalContent = button.Content;
+            
+            try
+            {
+                button.Content = "Testing...";
+                button.IsEnabled = false;
+                SpotifyTestStatus.Text = "";
+
+                var clientId = SpotifyClientIdPasswordBox.Password.Trim();
+                var clientSecret = SpotifyClientSecretPasswordBox.Password.Trim();
+                
+                if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
+                {
+                    SpotifyTestStatus.Text = "Please enter both Client ID and Client Secret";
+                    SpotifyTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(220, 53, 69)); // Red
+                    return;
+                }
+
+                // Test Spotify Client Credentials flow
+                using var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0");
+                
+                // Get access token using Client Credentials flow
+                var authString = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
+                var tokenRequest = new HttpRequestMessage(HttpMethod.Post, "https://accounts.spotify.com/api/token");
+                tokenRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", authString);
+                tokenRequest.Content = new FormUrlEncodedContent(new[]
+                {
+                    new KeyValuePair<string, string>("grant_type", "client_credentials")
+                });
+
+                var tokenResponse = await client.SendAsync(tokenRequest);
+                
+                if (tokenResponse.IsSuccessStatusCode)
+                {
+                    var tokenJson = await tokenResponse.Content.ReadAsStringAsync();
+                    using var doc = System.Text.Json.JsonDocument.Parse(tokenJson);
+                    
+                    if (doc.RootElement.TryGetProperty("access_token", out var tokenElement))
+                    {
+                        var accessToken = tokenElement.GetString();
+                        
+                        // Test search with the access token
+                        var searchRequest = new HttpRequestMessage(HttpMethod.Get, 
+                            "https://api.spotify.com/v1/search?q=artist:The%20Beatles%20album:Abbey%20Road&type=album&limit=1");
+                        searchRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+                        
+                        var searchResponse = await client.SendAsync(searchRequest);
+                        
+                        if (searchResponse.IsSuccessStatusCode)
+                        {
+                            var searchJson = await searchResponse.Content.ReadAsStringAsync();
+                            using var searchDoc = System.Text.Json.JsonDocument.Parse(searchJson);
+                            
+                            if (searchDoc.RootElement.TryGetProperty("albums", out var albums) &&
+                                albums.TryGetProperty("items", out var items) &&
+                                items.GetArrayLength() > 0)
+                            {
+                                SpotifyTestStatus.Text = "✓ Connection successful!";
+                                SpotifyTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(40, 167, 69)); // Green
+                            }
+                            else
+                            {
+                                SpotifyTestStatus.Text = "✓ Connected, but no search results";
+                                SpotifyTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 193, 7)); // Yellow
+                            }
+                        }
+                        else
+                        {
+                            SpotifyTestStatus.Text = $"✗ Search failed: {searchResponse.StatusCode}";
+                            SpotifyTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(220, 53, 69)); // Red
+                        }
+                    }
+                    else
+                    {
+                        SpotifyTestStatus.Text = "✗ Invalid token response";
+                        SpotifyTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(220, 53, 69)); // Red
+                    }
+                }
+                else
+                {
+                    SpotifyTestStatus.Text = $"✗ Authentication failed: {tokenResponse.StatusCode}";
+                    SpotifyTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(220, 53, 69)); // Red
+                }
+            }
+            catch (Exception ex)
+            {
+                SpotifyTestStatus.Text = $"✗ Error: {ex.Message}";
+                SpotifyTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(220, 53, 69)); // Red
+                System.Diagnostics.Debug.WriteLine($"Spotify test error: {ex}");
             }
             finally
             {

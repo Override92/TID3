@@ -6,8 +6,11 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using TID3.Models;
+using TID3.Services;
+using TID3.Utils;
 
-namespace TID3
+namespace TID3.Views
 {
     /// <summary>
     /// Interaction logic for SearchResultsWindow.xaml

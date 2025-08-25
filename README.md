@@ -6,7 +6,7 @@
 
 **Professional ID3 tag editor with batch processing and online database integration**
 
-[![.NET](https://img.shields.io/badge/.NET-8.0-5C2D91?style=flat-square&logo=.net)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-9.0-5C2D91?style=flat-square&logo=.net)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/Windows-11%20Ready-0078D4?style=flat-square&logo=windows)](https://www.microsoft.com/windows/)
 [![WPF](https://img.shields.io/badge/WPF-Modern%20UI-2D5699?style=flat-square)](https://docs.microsoft.com/en-us/dotnet/desktop/wpf/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
@@ -56,7 +56,7 @@
 
 ### Prerequisites
 - Windows 10/11
-- .NET 8.0 Runtime
+- .NET 9.0 Runtime
 - **For Fingerprinting**: Chromaprint (fpcalc.exe) - [Setup Guide](FINGERPRINTING_SETUP.md)
 
 ### First Steps
@@ -71,15 +71,22 @@
 ## 📊 Project Status
 
 ### ✅ Completed Features
-- [x] Core tag editing functionality
-- [x] Multi-format audio file support
-- [x] **Audio fingerprinting with AcoustID/Chromaprint**
-- [x] MusicBrainz API integration
-- [x] Discogs API integration
-- [x] Advanced matching algorithm
-- [x] Tag comparison system with change tracking
-- [x] Windows 11 modern UI design
-- [x] Settings management
+ ✅ Core tag editing functionality<br/>
+ ✅ Multi-format audio file support<br/>
+ ✅ Audio fingerprinting with AcoustID/Chromaprint<br/>
+ ✅ MusicBrainz API integration<br/>
+ ✅ Discogs API integration<br/>
+ ✅ Advanced matching algorithm<br/>
+ ✅ Tag comparison system with change tracking<br/>
+ ✅ Windows 11 modern UI design<br/>
+ ✅ Settings management<br/>
+ ✅ Album cover management system
+  - Local vs online cover source selection<br/>
+  - Resolution indicator display<br/>
+  
+ ✅ Enhanced batch editing capabilities
+  - Batch cover source selection<br/>
+  - Unified cover management across single and batch modes<br/>
 
 ### 🔧 Technical Implementation
 - **Architecture**: MVVM pattern with nullable reference types
@@ -103,7 +110,7 @@ dotnet build
 
 ### Requirements
 - Visual Studio 2022 or VS Code
-- .NET 8.0 SDK
+- .NET 9.0 SDK
 - Windows 10/11 for WPF development
 
 ### Architecture Overview

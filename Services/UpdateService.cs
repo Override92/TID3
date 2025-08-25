@@ -3,8 +3,10 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using TID3.Models;
+using TID3.Utils;
 
-namespace TID3
+namespace TID3.Services
 {
     public class UpdateInfo
     {
@@ -30,9 +32,9 @@ namespace TID3
         {
             try
             {
-                var response = await _httpClient.GetAsync(GITHUB_API_URL);
+                var response = await _httpClient.SafeGetAsync(GITHUB_API_URL);
                 
-                if (!response.IsSuccessStatusCode)
+                if (response == null || !response.IsSuccessStatusCode)
                 {
                     return null;
                 }

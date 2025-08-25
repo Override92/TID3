@@ -1,5 +1,9 @@
 ﻿using System;
 using System.Windows;
+using TID3.Models;
+using TID3.Services;
+using TID3.Utils;
+using TID3.Views;
 
 namespace TID3
 {

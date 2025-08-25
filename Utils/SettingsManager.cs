@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace TID3
+namespace TID3.Utils
 {
     public enum AppTheme
     {
@@ -162,6 +162,10 @@ namespace TID3
 
         [JsonPropertyName("standardize_separators")]
         public bool StandardizeSeparators { get; set; } = true;
+
+        // Cover Art Settings
+        [JsonPropertyName("cover_art_settings")]
+        public Models.CoverArtSourceSettings CoverArtSettings { get; set; } = new Models.CoverArtSourceSettings();
     }
 
     public class SettingsManager

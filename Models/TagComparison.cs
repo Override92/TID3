@@ -5,8 +5,10 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
+using TID3.Services;
+using TID3.Utils;
 
-namespace TID3
+namespace TID3.Models
 {
     public class TagComparisonItem : INotifyPropertyChanged
     {
@@ -429,6 +431,8 @@ namespace TID3
         {
             ClearComparison();
             ClearHistory();
+            // Clean up album cover image to prevent memory leaks
+            AlbumCover = null;
         }
 
         private void AddToHistory(string action, string details)

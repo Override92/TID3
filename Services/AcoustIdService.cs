@@ -10,8 +10,10 @@ using System.Text.Json.Serialization;
 using System.Text;
 using TagLib;
 using NAudio.Wave;
+using TID3.Models;
+using TID3.Utils;
 
-namespace TID3
+namespace TID3.Services
 {
     public class AcoustIdResult
     {
@@ -182,12 +184,10 @@ namespace TID3
 
                 // Parse output to extract fingerprint
                 var lines = output.Split('\n');
-                foreach (var line in lines)
+                var fingerprintLine = lines.Where(line => line.StartsWith("FINGERPRINT=")).FirstOrDefault();
+                if (fingerprintLine != null)
                 {
-                    if (line.StartsWith("FINGERPRINT="))
-                    {
-                        return line["FINGERPRINT=".Length..].Trim();
-                    }
+                    return fingerprintLine["FINGERPRINT=".Length..].Trim();
                 }
 
                 throw new InvalidOperationException("No fingerprint found in fpcalc output");
@@ -310,7 +310,7 @@ namespace TID3
             {
                 var url = "https://api.acoustid.org/v2/lookup";
                 
-                var content = new FormUrlEncodedContent([
+                using var content = new FormUrlEncodedContent([
                     new KeyValuePair<string, string>("client", _apiKey),
                     new KeyValuePair<string, string>("meta", "recordings"),
                     new KeyValuePair<string, string>("duration", duration.ToString()),
@@ -318,6 +318,12 @@ namespace TID3
                 ]);
 
                 var response = await _httpClient.PostAsync(url, content);
+                
+                if (response == null)
+                {
+                    throw new InvalidOperationException("Unable to connect to AcoustID service. Please check your internet connection.");
+                }
+
                 var jsonResponse = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)
@@ -337,6 +343,16 @@ namespace TID3
                 }
 
                 return await ProcessAcoustIdResponse(apiResponse, duration);
+            }
+            catch (HttpRequestException ex)
+            {
+                var friendlyMessage = HttpClientManager.GetFriendlyErrorMessage(ex);
+                throw new InvalidOperationException($"AcoustID lookup failed: {friendlyMessage}", ex);
+            }
+            catch (TaskCanceledException ex)
+            {
+                var friendlyMessage = HttpClientManager.GetFriendlyErrorMessage(ex);
+                throw new InvalidOperationException($"AcoustID lookup failed: {friendlyMessage}", ex);
             }
             catch (Exception ex)
             {
@@ -420,13 +436,10 @@ namespace TID3
             {
                 var url = $"https://musicbrainz.org/ws/2/recording/{recordingId}?fmt=json&inc=releases";
                 
-                var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Add("User-Agent", "TID3/1.0 (contact@example.com)");
+                var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0 (contact@example.com)");
+                var response = await client.SafeGetAsync(url, maxRetries: 2, delayMs: 500);
                 
-                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
-                var response = await _httpClient.SendAsync(request, cts.Token);
-                
-                if (!response.IsSuccessStatusCode)
+                if (response == null || !response.IsSuccessStatusCode)
                     return null;
                 
                 var jsonResponse = await response.Content.ReadAsStringAsync();
@@ -551,15 +564,7 @@ namespace TID3
                         @"C:\Windows\Media\ding.wav"
                     };
                     
-                    string? testFile = null;
-                    foreach (var file in testFiles)
-                    {
-                        if (System.IO.File.Exists(file))
-                        {
-                            testFile = file;
-                            break;
-                        }
-                    }
+                    string? testFile = testFiles.Where(System.IO.File.Exists).FirstOrDefault();
                     
                     if (testFile != null)
                     {
@@ -620,13 +625,17 @@ namespace TID3
             {
                 // Test with the same POST method as the real API call
                 var url = "https://api.acoustid.org/v2/lookup";
-                var content = new FormUrlEncodedContent([
+                using var content = new FormUrlEncodedContent([
                     new KeyValuePair<string, string>("client", _apiKey),
                     new KeyValuePair<string, string>("duration", "120"),
                     new KeyValuePair<string, string>("fingerprint", "AQABz0qUokqdomWqlGmSRkmUDEkGJwaOQymPgkeOhkeOHs9w9MiPI0eUPkeSH8lw9OixhJCSH8dxJkeSJj2OJMpw3MCR4weSjkeOSkmW5DiSJ8exQzlyfEGOJ82R_NCBJMexI0cPH8lzJMdSPkd2lEiOIzl8FE9yJMVT")
                 ]);
 
                 var response = await _httpClient.PostAsync(url, content);
+                
+                if (response == null)
+                    return false;
+
                 var jsonResponse = await response.Content.ReadAsStringAsync();
 
                 // Check if the response indicates a valid API key
