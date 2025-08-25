@@ -2110,7 +2110,10 @@ namespace TID3.Views
             if (sender is Button button)
             {
                 button.IsEnabled = false;
-                button.Content = "🔍 Searching...";
+                var searchingPanel = new StackPanel { Orientation = Orientation.Horizontal };
+                searchingPanel.Children.Add(new TextBlock { FontFamily = new FontFamily("Segoe Fluent Icons"), Text = "\uE721", FontSize = 14, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center });
+                searchingPanel.Children.Add(new TextBlock { Text = "Searching...", VerticalAlignment = VerticalAlignment.Center });
+                button.Content = searchingPanel;
             }
 
             try
@@ -2145,6 +2148,12 @@ namespace TID3.Views
                     MessageBox.Show($"Cover art search completed!\nFound {uniqueCoverSources} cover sources for {albumGroups.Count} album(s).", 
                                   "Search Complete", MessageBoxButton.OK, MessageBoxImage.Information);
 
+                    // Automatically check "Update Album Cover" checkbox if we found covers
+                    if (uniqueCoverSources > 0)
+                    {
+                        BatchAlbumCoverCheck.IsChecked = true;
+                    }
+
                     // Update batch cover display
                     UpdateBatchAlbumCover();
                 }
@@ -2166,7 +2175,10 @@ namespace TID3.Views
                 if (sender is Button btn)
                 {
                     btn.IsEnabled = true;
-                    btn.Content = "🔍 Search Cover Art";
+                    var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal };
+                    buttonPanel.Children.Add(new TextBlock { FontFamily = new FontFamily("Segoe Fluent Icons"), Text = "\uE721", FontSize = 14, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center });
+                    buttonPanel.Children.Add(new TextBlock { Text = "Search Cover Art", VerticalAlignment = VerticalAlignment.Center });
+                    btn.Content = buttonPanel;
                 }
             }
         }
@@ -2209,7 +2221,10 @@ namespace TID3.Views
             if (sender is Button button)
             {
                 button.IsEnabled = false;
-                button.Content = "🔍 Searching...";
+                var searchingPanel = new StackPanel { Orientation = Orientation.Horizontal };
+                searchingPanel.Children.Add(new TextBlock { FontFamily = new FontFamily("Segoe Fluent Icons"), Text = "\uE721", FontSize = 14, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center });
+                searchingPanel.Children.Add(new TextBlock { Text = "Searching...", VerticalAlignment = VerticalAlignment.Center });
+                button.Content = searchingPanel;
             }
 
             try
@@ -2235,6 +2250,12 @@ namespace TID3.Views
                     var totalCoversFound = selectedFiles.Sum(f => f.AvailableCovers.Count);
                     MessageBox.Show($"Cover art search completed!\nFound {totalCoversFound} cover sources for {albumGroups.Count} album(s).", 
                                   "Search Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                    
+                    // Automatically check "Update Album Cover" checkbox if we found covers
+                    if (totalCoversFound > 0 && IsInBatchMode())
+                    {
+                        BatchAlbumCoverCheck.IsChecked = true;
+                    }
                 }
                 else
                 {
@@ -2254,7 +2275,10 @@ namespace TID3.Views
                 if (sender is Button btn)
                 {
                     btn.IsEnabled = true;
-                    btn.Content = "🔍 Search Cover Art";
+                    var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal };
+                    buttonPanel.Children.Add(new TextBlock { FontFamily = new FontFamily("Segoe Fluent Icons"), Text = "\uE721", FontSize = 14, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center });
+                    buttonPanel.Children.Add(new TextBlock { Text = "Search Cover Art", VerticalAlignment = VerticalAlignment.Center });
+                    btn.Content = buttonPanel;
                 }
             }
         }
