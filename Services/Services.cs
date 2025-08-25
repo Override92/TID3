@@ -583,7 +583,7 @@ namespace TID3.Services
             return $"{number:n1} {suffixes[counter]}";
         }
 
-        public (bool Success, bool CoverArtSaved) SaveFile(AudioFileInfo audioFile)
+        public (bool Success, bool CoverArtSaved) SaveFile(AudioFileInfo audioFile, bool replaceExistingCoverArt = false)
         {
             try
             {
@@ -599,7 +599,7 @@ namespace TID3.Services
                 file.Save();
                 
                 // Save cover art to album folder if it's from an online source
-                bool coverArtSaved = SaveCoverArtToFolder(audioFile);
+                bool coverArtSaved = SaveCoverArtToFolder(audioFile, replaceExistingCoverArt);
                 if (coverArtSaved)
                 {
                     System.Diagnostics.Debug.WriteLine($"Cover art saved to album folder for: {audioFile.FileName}");
@@ -614,7 +614,7 @@ namespace TID3.Services
             }
         }
 
-        public (int SavedFiles, int CoverArtsSaved) BatchUpdate(IEnumerable<AudioFileInfo> files, AudioFileInfo template)
+        public (int SavedFiles, int CoverArtsSaved) BatchUpdate(IEnumerable<AudioFileInfo> files, AudioFileInfo template, bool replaceExistingCoverArt = false)
         {
             int savedFiles = 0;
             int coverArtsSaved = 0;
@@ -626,7 +626,7 @@ namespace TID3.Services
                 if (!string.IsNullOrEmpty(template.Genre)) file.Genre = template.Genre;
                 if (template.Year > 0) file.Year = template.Year;
                 
-                var (success, coverArtSaved) = SaveFile(file);
+                var (success, coverArtSaved) = SaveFile(file, replaceExistingCoverArt);
                 if (success) savedFiles++;
                 if (coverArtSaved) coverArtsSaved++;
             }
@@ -777,6 +777,20 @@ namespace TID3.Services
         {
             try
             {
+                // First, get the original dimensions without resizing
+                int originalWidth, originalHeight;
+                using (var stream = new FileStream(imagePath, FileMode.Open, FileAccess.Read))
+                {
+                    var tempImage = new BitmapImage();
+                    tempImage.BeginInit();
+                    tempImage.StreamSource = stream;
+                    tempImage.CacheOption = BitmapCacheOption.OnLoad;
+                    tempImage.EndInit();
+                    originalWidth = tempImage.PixelWidth;
+                    originalHeight = tempImage.PixelHeight;
+                }
+
+                // Now create the display-optimized image
                 var bitmapImage = new BitmapImage();
                 bitmapImage.BeginInit();
                 bitmapImage.UriSource = new Uri(imagePath);
@@ -784,6 +798,13 @@ namespace TID3.Services
                 bitmapImage.DecodePixelWidth = 200; // Optimize for display size
                 bitmapImage.EndInit();
                 bitmapImage.Freeze(); // Make it cross-thread accessible
+                
+                // Store original dimensions in metadata for resolution display
+                bitmapImage.SetValue(OriginalWidthProperty, originalWidth);
+                bitmapImage.SetValue(OriginalHeightProperty, originalHeight);
+                
+                System.Diagnostics.Debug.WriteLine($"LoadImageFromFile: {imagePath} - Original: {originalWidth}×{originalHeight}, Resized: {bitmapImage.PixelWidth}×{bitmapImage.PixelHeight}");
+                
                 return bitmapImage;
             }
             catch (Exception ex)
@@ -792,6 +813,12 @@ namespace TID3.Services
                 return null;
             }
         }
+
+        // Dependency properties to store original dimensions
+        public static readonly DependencyProperty OriginalWidthProperty = 
+            DependencyProperty.RegisterAttached("OriginalWidth", typeof(int), typeof(TagService));
+        public static readonly DependencyProperty OriginalHeightProperty = 
+            DependencyProperty.RegisterAttached("OriginalHeight", typeof(int), typeof(TagService));
 
         public void RefreshFolderCoverArt(IEnumerable<AudioFileInfo> audioFiles)
         {
@@ -868,16 +895,26 @@ namespace TID3.Services
             return "";
         }
 
-        public bool SaveCoverArtToFolder(AudioFileInfo audioFile)
+        public bool SaveCoverArtToFolder(AudioFileInfo audioFile, bool replaceExisting = false)
         {
             try
             {
+                var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "TID3_Debug.log");
+                System.IO.File.AppendAllText(logPath, $"\n=== SAVE COVER ART ===\n");
+                System.IO.File.AppendAllText(logPath, $"File: {audioFile.FileName}\n");
+                System.IO.File.AppendAllText(logPath, $"Replace existing: {replaceExisting}\n");
+                System.IO.File.AppendAllText(logPath, $"Cover source: '{audioFile.CoverArtSource}'\n");
+                System.IO.File.AppendAllText(logPath, $"Has cover: {audioFile.AlbumCover != null}\n");
+                
                 // Only save cover art if it's from an online source (not embedded or already from folder)
                 if (audioFile.AlbumCover == null || 
                     audioFile.CoverArtSource == "Embedded in file" || 
                     audioFile.CoverArtSource.StartsWith("Folder file:") ||
                     string.IsNullOrEmpty(audioFile.CoverArtSource))
+                {
+                    System.IO.File.AppendAllText(logPath, $"SKIPPED: Not an online source\n");
                     return false;
+                }
 
                 var folderPath = Path.GetDirectoryName(audioFile.FilePath);
                 if (string.IsNullOrEmpty(folderPath))
@@ -887,11 +924,28 @@ namespace TID3.Services
                 string coverFileName = GetCoverArtFileName(audioFile);
                 string coverFilePath = Path.Combine(folderPath, coverFileName);
 
-                // Don't overwrite if file already exists
+                System.IO.File.AppendAllText(logPath, $"Chosen filename: {coverFileName}\n");
+                System.IO.File.AppendAllText(logPath, $"Target file: {coverFilePath}\n");
+                
+                // Check if file exists and whether we should replace it
                 if (System.IO.File.Exists(coverFilePath))
                 {
-                    System.Diagnostics.Debug.WriteLine($"Cover art file already exists: {coverFilePath}");
-                    return false;
+                    System.IO.File.AppendAllText(logPath, $"File exists, replace={replaceExisting}\n");
+                    if (!replaceExisting)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Cover art file already exists: {coverFilePath}");
+                        System.IO.File.AppendAllText(logPath, $"SKIPPED: File exists and replace=false\n");
+                        return false;
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Replacing existing cover art file: {coverFilePath}");
+                        System.IO.File.AppendAllText(logPath, $"REPLACING: File exists but replace=true\n");
+                    }
+                }
+                else
+                {
+                    System.IO.File.AppendAllText(logPath, $"File does not exist, will create new\n");
                 }
 
                 // Convert BitmapImage to byte array and save
@@ -900,9 +954,11 @@ namespace TID3.Services
                 {
                     System.IO.File.WriteAllBytes(coverFilePath, imageBytes);
                     System.Diagnostics.Debug.WriteLine($"Saved cover art to: {coverFilePath} (Source: {audioFile.CoverArtSource})");
+                    System.IO.File.AppendAllText(logPath, $"SUCCESS: Saved {imageBytes.Length} bytes to {coverFilePath}\n");
                     return true;
                 }
                 
+                System.IO.File.AppendAllText(logPath, $"FAILED: No image bytes to save\n");
                 return false;
             }
             catch (Exception ex)
@@ -914,30 +970,27 @@ namespace TID3.Services
 
         private string GetCoverArtFileName(AudioFileInfo audioFile)
         {
-            // Check for existing cover art files with common names first
             var folderPath = Path.GetDirectoryName(audioFile.FilePath);
             if (!string.IsNullOrEmpty(folderPath))
             {
-                string[] commonNames = { "folder.jpg", "cover.jpg", "front.jpg", "albumart.jpg" };
+                string[] commonNames = { "folder.jpg", "cover.jpg", "front.jpg", "albumart.jpg", "album.jpg", "folder.jpeg", "cover.jpeg", "front.jpeg", "albumart.jpeg", "album.jpeg", "folder.png", "cover.png", "front.png", "albumart.png", "album.png" };
                 
+                // First, check if there's already a local cover art file that we should replace
                 foreach (var name in commonNames)
                 {
-                    if (!System.IO.File.Exists(Path.Combine(folderPath, name)))
+                    if (System.IO.File.Exists(Path.Combine(folderPath, name)))
                     {
-                        return name; // Use the first available common name
+                        return name; // Use the existing file name to replace it
                     }
                 }
+                
+                // If no existing cover art file found, use the default preference order
+                string[] preferredNames = { "cover.jpg", "folder.jpg", "front.jpg", "albumart.jpg", "album.jpg" };
+                return preferredNames[0]; // Default to cover.jpg for new files
             }
 
-            // If all common names exist, try album-specific name
-            if (!string.IsNullOrEmpty(audioFile.Album))
-            {
-                string safeName = SanitizeFileName(audioFile.Album);
-                return $"{safeName}.jpg";
-            }
-            
-            // Last resort: use timestamp to avoid conflicts
-            return $"cover_{DateTime.Now:yyyyMMdd_HHmmss}.jpg";
+            // Fallback if folder path is empty
+            return "cover.jpg";
         }
 
         private string SanitizeFileName(string fileName)

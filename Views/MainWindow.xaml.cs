@@ -105,6 +105,7 @@ namespace TID3.Views
         private readonly DiscogsService _discogsService;
         private readonly UpdateService _updateService;
         private readonly OnlineSourceCacheManager _cacheManager;
+        private readonly CoverArtService _coverArtService;
         private readonly ObservableCollection<AudioFileInfo> _audioFiles;
         private readonly ObservableCollection<OnlineSourceItem> _onlineSourceItems;
         private readonly ObservableCollection<AlbumGroup> _hierarchicalItems;
@@ -136,7 +137,12 @@ namespace TID3.Views
                 if (_selectedFile != null)
                 {
                     var cachedResults = _cacheManager.GetResults(_selectedFile.FilePath);
-                    foreach (var result in cachedResults)
+                    // Sort results by score (extract percentage from DisplayName and sort descending)
+                    var sortedResults = cachedResults
+                        .OrderByDescending(result => ExtractScoreFromDisplayName(result.DisplayName))
+                        .ThenBy(result => result.DisplayName);
+                    
+                    foreach (var result in sortedResults)
                     {
                         _onlineSourceItems.Add(result);
                     }
@@ -157,6 +163,16 @@ namespace TID3.Views
 
         public bool IsFileSelected => SelectedFile != null;
 
+        private readonly ObservableCollection<AudioFileInfo> _selectedFiles = new ObservableCollection<AudioFileInfo>();
+        private readonly ObservableCollection<AlbumGroup> _selectedAlbums = new ObservableCollection<AlbumGroup>();
+        
+        public ObservableCollection<AudioFileInfo> SelectedFiles => _selectedFiles;
+        public ObservableCollection<AlbumGroup> SelectedAlbums => _selectedAlbums;
+        
+        public bool HasMultipleSelection => _selectedFiles.Count > 1 || _selectedAlbums.Count > 0;
+        public bool HasAlbumSelection => _selectedAlbums.Count > 0;
+        public bool HasTrackSelection => _selectedFiles.Count > 0;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -170,6 +186,10 @@ namespace TID3.Views
             _discogsService = new DiscogsService();
             _updateService = new UpdateService();
             _cacheManager = new OnlineSourceCacheManager();
+            
+            // Initialize cover art service with user settings
+            var settings = SettingsManager.LoadSettings();
+            _coverArtService = new CoverArtService(settings.CoverArtSettings);
             _audioFiles = new ObservableCollection<AudioFileInfo>();
             _onlineSourceItems = new ObservableCollection<OnlineSourceItem>();
             _hierarchicalItems = new ObservableCollection<AlbumGroup>();
@@ -356,6 +376,150 @@ namespace TID3.Views
             }
         }
 
+        private void AlbumCheckBox_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is CheckBox checkBox && checkBox.DataContext is AlbumGroup albumGroup)
+            {
+                bool isChecked = checkBox.IsChecked == true;
+                System.Diagnostics.Debug.WriteLine($"AlbumCheckBox_Click: Album '{albumGroup.Album}', IsChecked: {isChecked}");
+                
+                if (isChecked)
+                {
+                    // Album is being selected - clear any individual track selections and uncheck their boxes
+                    _selectedFiles.Clear();
+                    ClearAllTrackCheckboxes();
+                    ClearAllTrackSelections();
+                    
+                    // Add album to selection and set IsSelected property for highlighting
+                    if (!_selectedAlbums.Contains(albumGroup))
+                    {
+                        _selectedAlbums.Add(albumGroup);
+                        albumGroup.IsSelected = true;
+                        System.Diagnostics.Debug.WriteLine($"Added album to selection. Total selected albums: {_selectedAlbums.Count}");
+                    }
+                }
+                else
+                {
+                    // Album is being deselected
+                    _selectedAlbums.Remove(albumGroup);
+                    albumGroup.IsSelected = false;
+                    System.Diagnostics.Debug.WriteLine($"Removed album from selection. Total selected albums: {_selectedAlbums.Count}");
+                }
+                
+                UpdateSelectionProperties();
+            }
+        }
+
+        private void TrackCheckBox_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is CheckBox checkBox && checkBox.DataContext is AudioFileInfo track)
+            {
+                bool isChecked = checkBox.IsChecked == true;
+                System.Diagnostics.Debug.WriteLine($"TrackCheckBox_Click: Track '{track.Title}', IsChecked: {isChecked}");
+                
+                if (isChecked)
+                {
+                    // Track is being selected - clear any album selections only if this is the first track selection
+                    if (_selectedFiles.Count == 0)
+                    {
+                        _selectedAlbums.Clear();
+                        ClearAllAlbumCheckboxes();
+                        ClearAllAlbumSelections();
+                    }
+                    
+                    // Add track to selection and set IsSelected property for highlighting
+                    if (!_selectedFiles.Contains(track))
+                    {
+                        _selectedFiles.Add(track);
+                        track.IsSelected = true;
+                        System.Diagnostics.Debug.WriteLine($"Added track to selection. Total selected files: {_selectedFiles.Count}");
+                    }
+                }
+                else
+                {
+                    // Track is being deselected
+                    _selectedFiles.Remove(track);
+                    track.IsSelected = false;
+                    System.Diagnostics.Debug.WriteLine($"Removed track from selection. Total selected files: {_selectedFiles.Count}");
+                }
+                
+                UpdateSelectionProperties();
+            }
+        }
+
+        private void ClearAllTrackCheckboxes()
+        {
+            // Find all track checkboxes in the TreeView and uncheck them
+            foreach (var item in MainTreeView.Items)
+            {
+                if (MainTreeView.ItemContainerGenerator.ContainerFromItem(item) is TreeViewItem albumContainer)
+                {
+                    if (item is AlbumGroup album)
+                    {
+                        foreach (var track in album.Tracks)
+                        {
+                            if (albumContainer.ItemContainerGenerator.ContainerFromItem(track) is TreeViewItem trackContainer)
+                            {
+                                var trackCheckBox = FindVisualChild<CheckBox>(trackContainer);
+                                if (trackCheckBox != null)
+                                {
+                                    trackCheckBox.IsChecked = false;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private void ClearAllAlbumCheckboxes()
+        {
+            // Find all album checkboxes in the TreeView and uncheck them
+            foreach (var item in MainTreeView.Items)
+            {
+                if (MainTreeView.ItemContainerGenerator.ContainerFromItem(item) is TreeViewItem albumContainer)
+                {
+                    var albumCheckBox = FindVisualChild<CheckBox>(albumContainer);
+                    if (albumCheckBox != null)
+                    {
+                        albumCheckBox.IsChecked = false;
+                    }
+                }
+            }
+        }
+
+        private void ClearAllTrackSelections()
+        {
+            // Clear IsSelected property from all tracks for highlighting
+            foreach (var album in _hierarchicalItems)
+            {
+                foreach (var track in album.Tracks)
+                {
+                    track.IsSelected = false;
+                }
+            }
+        }
+
+        private void ClearAllAlbumSelections()
+        {
+            // Clear IsSelected property from all albums for highlighting
+            foreach (var album in _hierarchicalItems)
+            {
+                album.IsSelected = false;
+            }
+        }
+
+
+        private void UpdateSelectionProperties()
+        {
+            OnPropertyChanged(nameof(HasMultipleSelection));
+            OnPropertyChanged(nameof(HasAlbumSelection));
+            OnPropertyChanged(nameof(HasTrackSelection));
+            
+            // Update editor panel visibility based on current selection
+            UpdateEditorPanelVisibility();
+        }
+
         #region File Operations
 
         private void LoadFiles_Click(object sender, RoutedEventArgs e)
@@ -431,7 +595,28 @@ namespace TID3.Views
         {
             try
             {
-                var totalFiles = filePaths.Length;
+                // Filter out already loaded files
+                var existingFilePaths = new HashSet<string>(_audioFiles.Select(f => Path.GetFullPath(f.FilePath)), StringComparer.OrdinalIgnoreCase);
+                var newFilePaths = filePaths.Where(path => !existingFilePaths.Contains(Path.GetFullPath(path))).ToArray();
+                var duplicateCount = filePaths.Length - newFilePaths.Length;
+                
+                if (duplicateCount > 0)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Skipped {duplicateCount} duplicate file{(duplicateCount != 1 ? "s" : "")} already loaded");
+                }
+                
+                if (newFilePaths.Length == 0)
+                {
+                    if (duplicateCount > 0)
+                    {
+                        UpdateStatus($"All {filePaths.Length} file{(filePaths.Length != 1 ? "s" : "")} already loaded");
+                        MessageBox.Show($"All {filePaths.Length} selected file{(filePaths.Length != 1 ? "s are" : " is")} already loaded in the application.", 
+                            "Duplicate Files", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    return;
+                }
+                
+                var totalFiles = newFilePaths.Length;
                 var processedCount = 0;
                 var successfulCount = 0;
                 
@@ -443,7 +628,11 @@ namespace TID3.Views
                 var parallelismNote = maxDegreeOfParallelism > 1 
                     ? $"using {maxDegreeOfParallelism} parallel threads" 
                     : "using single thread";
-                UpdateStatus($"Loading {totalFiles} files {parallelismNote}...");
+                
+                var statusMessage = duplicateCount > 0 
+                    ? $"Loading {totalFiles} new files {parallelismNote} ({duplicateCount} duplicate{(duplicateCount != 1 ? "s" : "")} skipped)..."
+                    : $"Loading {totalFiles} files {parallelismNote}...";
+                UpdateStatus(statusMessage);
                 
 
                 // Create progress reporter with throttling for better performance
@@ -475,7 +664,7 @@ namespace TID3.Views
                         MaxDegreeOfParallelism = maxDegreeOfParallelism
                     };
 
-                    Parallel.ForEach(filePaths, parallelOptions, fileName =>
+                    Parallel.ForEach(newFilePaths, parallelOptions, fileName =>
                     {
                         try
                         {
@@ -542,7 +731,8 @@ namespace TID3.Views
                 var filesWithCoverArt = _audioFiles.Count(f => f.AlbumCover != null);
                 var coverArtNote = filesWithCoverArt > 0 ? $", {filesWithCoverArt} with cover art" : "";
                 
-                UpdateStatus($"Loaded {successfulCount}/{totalFiles} files in {stopwatch.ElapsedMilliseconds}ms ({performanceNote}: {avgTimePerFile:F0}ms/file, {threadsNote}){coverArtNote}.");
+                var duplicateNote = duplicateCount > 0 ? $" ({duplicateCount} duplicate{(duplicateCount != 1 ? "s" : "")} skipped)" : "";
+                UpdateStatus($"Loaded {successfulCount}/{totalFiles} files in {stopwatch.ElapsedMilliseconds}ms ({performanceNote}: {avgTimePerFile:F0}ms/file, {threadsNote}){coverArtNote}{duplicateNote}.");
             }
             catch (Exception ex)
             {
@@ -555,34 +745,74 @@ namespace TID3.Views
 
         private void SaveSelected_Click(object sender, RoutedEventArgs e)
         {
-            if (SelectedFile == null)
+            List<AudioFileInfo> filesToSave = new List<AudioFileInfo>();
+            
+            // Check multiselect collections first
+            if (_selectedFiles.Count > 0)
             {
-                MessageBox.Show("Please select a file to save.", "No File Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
+                filesToSave.AddRange(_selectedFiles);
+            }
+            else if (_selectedAlbums.Count > 0)
+            {
+                filesToSave.AddRange(_selectedAlbums.SelectMany(album => album.Tracks));
+            }
+            else if (SelectedFile != null)
+            {
+                filesToSave.Add(SelectedFile);
+            }
+            
+            if (!filesToSave.Any())
+            {
+                MessageBox.Show("Please select files to save.", "No Files Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             try
             {
-                var (success, coverArtSaved) = _tagService.SaveFile(SelectedFile);
-                if (success)
+                int successCount = 0;
+                int coverArtSavedCount = 0;
+                var failedFiles = new List<string>();
+
+                foreach (var file in filesToSave)
                 {
-                    string message = "File saved successfully!";
-                    if (coverArtSaved)
+                    var replaceCoverArt = IsInBatchMode() ? BatchReplaceCoverArtCheckBox.IsChecked == true : ReplaceCoverArtCheckBox.IsChecked == true;
+                    var (success, coverArtSaved) = _tagService.SaveFile(file, replaceCoverArt);
+                    if (success)
                     {
-                        message += $"\nCover art also saved to album folder.";
+                        successCount++;
+                        if (coverArtSaved) coverArtSavedCount++;
+                    }
+                    else
+                    {
+                        failedFiles.Add(file.FileName);
+                    }
+                }
+
+                if (successCount > 0)
+                {
+                    string message = $"Successfully saved {successCount} file{(successCount != 1 ? "s" : "")}!";
+                    if (coverArtSavedCount > 0)
+                    {
+                        message += $"\nCover art also saved for {coverArtSavedCount} file{(coverArtSavedCount != 1 ? "s" : "")}.";
                     }
                     
-                    UpdateStatus($"Successfully saved: {SelectedFile.FileName}");
-                    MessageBox.Show(message, "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    if (failedFiles.Any())
+                    {
+                        message += $"\n\nFailed to save {failedFiles.Count} file{(failedFiles.Count != 1 ? "s" : "")}:\n{string.Join("\n", failedFiles)}";
+                    }
+                    
+                    UpdateStatus($"Saved {successCount} of {filesToSave.Count} selected files");
+                    MessageBox.Show(message, "Save Results", MessageBoxButton.OK, 
+                        failedFiles.Any() ? MessageBoxImage.Warning : MessageBoxImage.Information);
                 }
                 else
                 {
-                    MessageBox.Show("Failed to save file. Please check the file permissions.", "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show("Failed to save any files. Please check the file permissions.", "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error saving file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Error saving files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -610,7 +840,8 @@ namespace TID3.Views
                     
                     foreach (var file in _audioFiles)
                     {
-                        var (success, coverArtSaved) = _tagService.SaveFile(file);
+                        var replaceCoverArt = IsInBatchMode() ? BatchReplaceCoverArtCheckBox.IsChecked == true : ReplaceCoverArtCheckBox.IsChecked == true;
+                        var (success, coverArtSaved) = _tagService.SaveFile(file, replaceCoverArt);
                         if (success) savedCount++;
                         if (coverArtSaved) coverArtCount++;
                     }
@@ -644,14 +875,18 @@ namespace TID3.Views
 
         private void MainTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            if (e.NewValue is AudioFileInfo audioFile)
+            // Only update SelectedFile if we don't have a multiselect scenario
+            if (_selectedFiles.Count <= 1 && _selectedAlbums.Count == 0)
             {
-                SelectedFile = audioFile;
-            }
-            else if (e.NewValue is AlbumGroup albumGroup)
-            {
-                // When selecting an album group, select the first track if available
-                SelectedFile = albumGroup.Tracks.FirstOrDefault();
+                if (e.NewValue is AudioFileInfo audioFile)
+                {
+                    SelectedFile = audioFile;
+                }
+                else if (e.NewValue is AlbumGroup albumGroup)
+                {
+                    // When selecting an album group, select the first track if available
+                    SelectedFile = albumGroup.Tracks.FirstOrDefault();
+                }
             }
             
             UpdateEditorPanelVisibility();
@@ -744,31 +979,68 @@ namespace TID3.Views
 
         private void RemoveSelectedItems()
         {
-            var selectedItem = MainTreeView.SelectedItem;
+            List<AudioFileInfo> filesToRemove = new List<AudioFileInfo>();
             
-            if (selectedItem is AudioFileInfo audioFile)
+            // Check multiselect collections first
+            if (_selectedFiles.Count > 0)
             {
-                // Remove single track
-                _audioFiles.Remove(audioFile);
-                // Clear cache for this file
-                _cacheManager.ClearResultsForFile(audioFile.FilePath);
+                filesToRemove.AddRange(_selectedFiles);
             }
-            else if (selectedItem is AlbumGroup albumGroup)
+            else if (_selectedAlbums.Count > 0)
             {
-                // Remove entire album
-                var tracksToRemove = albumGroup.Tracks.ToList();
-                foreach (var track in tracksToRemove)
+                filesToRemove.AddRange(_selectedAlbums.SelectMany(album => album.Tracks));
+            }
+            else
+            {
+                // Fall back to TreeView selection for backward compatibility
+                var selectedItem = MainTreeView.SelectedItem;
+                if (selectedItem is AudioFileInfo audioFile)
                 {
-                    _audioFiles.Remove(track);
-                    // Clear cache for each track
-                    _cacheManager.ClearResultsForFile(track.FilePath);
+                    filesToRemove.Add(audioFile);
+                }
+                else if (selectedItem is AlbumGroup albumGroup)
+                {
+                    filesToRemove.AddRange(albumGroup.Tracks);
                 }
             }
             
-            // Clear current UI display if the removed file was selected
-            if (selectedItem is AudioFileInfo removedFile && SelectedFile?.FilePath == removedFile.FilePath)
+            if (!filesToRemove.Any()) return;
+            
+            // Confirm removal if multiple files
+            if (filesToRemove.Count > 1)
+            {
+                var result = MessageBox.Show(
+                    $"Are you sure you want to remove {filesToRemove.Count} selected files from the list?",
+                    "Confirm Removal",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                    
+                if (result != MessageBoxResult.Yes) return;
+            }
+            
+            // Remove files and clear caches
+            foreach (var track in filesToRemove)
+            {
+                _audioFiles.Remove(track);
+                _cacheManager.ClearResultsForFile(track.FilePath);
+                
+                // Clear from multiselect collections
+                _selectedFiles.Remove(track);
+            }
+            
+            // Clear selected albums that no longer have tracks
+            var albumsToRemove = _selectedAlbums.Where(album => 
+                album.Tracks.All(track => filesToRemove.Contains(track))).ToList();
+            foreach (var album in albumsToRemove)
+            {
+                _selectedAlbums.Remove(album);
+            }
+            
+            // Clear current UI display if any removed file was the selected file
+            if (filesToRemove.Any(f => SelectedFile?.FilePath == f.FilePath))
             {
                 _onlineSourceItems.Clear();
+                SelectedFile = null;
             }
             
             // Update UI
@@ -784,9 +1056,44 @@ namespace TID3.Views
 
         private void UpdateEditorPanelVisibility()
         {
+            // Check multiselect scenario first
+            if (_selectedFiles.Count > 1)
+            {
+                // Multiple tracks selected - show batch editing
+                EditorHeaderText.Text = $"Batch Edit ({_selectedFiles.Count} tracks)";
+                SelectionInfoText.Text = $"Editing {_selectedFiles.Count} selected tracks";
+                SingleEditPanel.Visibility = Visibility.Collapsed;
+                BatchEditPanel.Visibility = Visibility.Visible;
+                
+                // Update batch field values for selected tracks
+                UpdateBatchFieldValues(_selectedFiles.ToList());
+                
+                // Update batch album cover display (may show mixed covers)
+                UpdateBatchAlbumCoverForSelectedTracks(_selectedFiles.ToList());
+                return;
+            }
+            else if (_selectedAlbums.Count > 0)
+            {
+                // One or more albums selected
+                var totalTracks = _selectedAlbums.Sum(album => album.Tracks.Count);
+                var albumNames = string.Join(", ", _selectedAlbums.Select(a => $"'{a.AlbumInfo}'"));
+                
+                EditorHeaderText.Text = $"Album Edit ({totalTracks} tracks)";
+                SelectionInfoText.Text = $"Editing albums: {albumNames}";
+                SingleEditPanel.Visibility = Visibility.Collapsed;
+                BatchEditPanel.Visibility = Visibility.Visible;
+                
+                // Combine tracks from all selected albums
+                var allTracks = _selectedAlbums.SelectMany(album => album.Tracks).ToList();
+                UpdateBatchFieldValues(allTracks);
+                UpdateBatchAlbumCoverForSelectedTracks(allTracks);
+                return;
+            }
+            
+            // Fall back to TreeView selection for single selection or no multiselect
             var selectedItem = MainTreeView?.SelectedItem;
             
-            if (selectedItem == null)
+            if (selectedItem == null && _selectedFiles.Count == 0 && _selectedAlbums.Count == 0)
             {
                 // No selection
                 EditorHeaderText.Text = "Tag Editor";
@@ -795,9 +1102,21 @@ namespace TID3.Views
                 BatchEditPanel.Visibility = Visibility.Collapsed;
                 ClearBatchAlbumCover();
             }
+            else if (_selectedFiles.Count == 1)
+            {
+                // Single track selected via checkbox
+                EditorHeaderText.Text = "Tag Editor";
+                SelectionInfoText.Text = "Editing single file";
+                SingleEditPanel.Visibility = Visibility.Visible;
+                BatchEditPanel.Visibility = Visibility.Collapsed;
+                ClearBatchAlbumCover();
+                
+                // Update SelectedFile for single edit panel
+                SelectedFile = _selectedFiles.First();
+            }
             else if (selectedItem is AudioFileInfo)
             {
-                // Single file selected
+                // Single file selected via TreeView
                 EditorHeaderText.Text = "Tag Editor";
                 SelectionInfoText.Text = "Editing single file";
                 SingleEditPanel.Visibility = Visibility.Visible;
@@ -806,7 +1125,7 @@ namespace TID3.Views
             }
             else if (selectedItem is AlbumGroup albumGroup)
             {
-                // Album group selected - show batch editing for all tracks in album
+                // Album group selected via TreeView - show batch editing for all tracks in album
                 var trackCount = albumGroup.Tracks.Count;
                 EditorHeaderText.Text = $"Album Edit ({trackCount} tracks)";
                 SelectionInfoText.Text = $"Editing all tracks in '{albumGroup.AlbumInfo}'";
@@ -841,50 +1160,81 @@ namespace TID3.Views
             }
         }
 
+        private void UpdateBatchAlbumCoverForSelectedTracks(List<AudioFileInfo> tracks)
+        {
+            try
+            {
+                // Collect all available cover sources from selected tracks
+                PopulateBatchCoverSources(tracks);
+                
+                // Update the display
+                UpdateBatchAlbumCoverDisplay();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error updating batch album cover for selected tracks: {ex.Message}");
+                BatchAlbumCoverImage.Source = null;
+                BatchAlbumCoverText.Text = "Error Loading Cover";
+                BatchAlbumCoverText.Visibility = Visibility.Visible;
+                BatchCoverSourceComboBox.Visibility = Visibility.Collapsed;
+            }
+        }
+
         private void PopulateBatchCoverSources(List<AudioFileInfo> tracks)
         {
-            _batchAvailableCovers.Clear();
-            var coverSourceMap = new Dictionary<string, CoverSource>();
-
-            foreach (var track in tracks)
+            // Temporarily disable the SelectionChanged event to prevent recursion
+            BatchCoverSourceComboBox.SelectionChanged -= BatchCoverSourceComboBox_SelectionChanged;
+            
+            try
             {
-                foreach (var coverSource in track.AvailableCovers)
+                _batchAvailableCovers.Clear();
+                var coverSourceMap = new Dictionary<string, CoverSource>();
+
+                foreach (var track in tracks)
                 {
-                    if (!coverSourceMap.ContainsKey(coverSource.Name))
+                    foreach (var coverSource in track.AvailableCovers)
                     {
-                        coverSourceMap[coverSource.Name] = new CoverSource
+                        if (!coverSourceMap.ContainsKey(coverSource.Name))
                         {
-                            Name = coverSource.Name,
-                            Image = coverSource.Image,
-                            Source = coverSource.Source
-                        };
+                            coverSourceMap[coverSource.Name] = new CoverSource
+                            {
+                                Name = coverSource.Name,
+                                Image = coverSource.Image,
+                                Source = coverSource.Source
+                            };
+                        }
                     }
                 }
-            }
 
-            foreach (var coverSource in coverSourceMap.Values)
+                foreach (var coverSource in coverSourceMap.Values)
+                {
+                    _batchAvailableCovers.Add(coverSource);
+                }
+
+                // Set up ComboBox
+                BatchCoverSourceComboBox.ItemsSource = _batchAvailableCovers;
+                
+                // Select first available source if none is selected
+                if (string.IsNullOrEmpty(_selectedBatchCoverSource) && _batchAvailableCovers.Count > 0)
+                {
+                    _selectedBatchCoverSource = _batchAvailableCovers.First().Name;
+                }
+
+                // Set selected item
+                var selectedCover = _batchAvailableCovers.FirstOrDefault(c => c.Name == _selectedBatchCoverSource);
+                if (selectedCover != null)
+                {
+                    BatchCoverSourceComboBox.SelectedItem = selectedCover;
+                }
+
+                // Show/hide ComboBox based on availability
+                BatchCoverSourceComboBox.Visibility = _batchAvailableCovers.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+            }
+            finally
             {
-                _batchAvailableCovers.Add(coverSource);
+                // Re-enable the SelectionChanged event
+                BatchCoverSourceComboBox.SelectionChanged += BatchCoverSourceComboBox_SelectionChanged;
             }
-
-            // Set up ComboBox
-            BatchCoverSourceComboBox.ItemsSource = _batchAvailableCovers;
-            
-            // Select first available source if none is selected
-            if (string.IsNullOrEmpty(_selectedBatchCoverSource) && _batchAvailableCovers.Count > 0)
-            {
-                _selectedBatchCoverSource = _batchAvailableCovers.First().Name;
-            }
-
-            // Set selected item
-            var selectedCover = _batchAvailableCovers.FirstOrDefault(c => c.Name == _selectedBatchCoverSource);
-            if (selectedCover != null)
-            {
-                BatchCoverSourceComboBox.SelectedItem = selectedCover;
-            }
-
-            // Show/hide ComboBox based on availability
-            BatchCoverSourceComboBox.Visibility = _batchAvailableCovers.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void UpdateBatchAlbumCoverDisplay()
@@ -1074,16 +1424,31 @@ namespace TID3.Views
 
         private void ApplyBatchEdit_Click(object sender, RoutedEventArgs e)
         {
-            var selectedItem = MainTreeView.SelectedItem;
             List<AudioFileInfo> selectedFiles = new List<AudioFileInfo>();
 
-            if (selectedItem is AudioFileInfo audioFile)
+            // Check multiselect collections first
+            if (_selectedFiles.Count > 0)
             {
-                selectedFiles.Add(audioFile);
+                // Use multiselected tracks
+                selectedFiles.AddRange(_selectedFiles);
             }
-            else if (selectedItem is AlbumGroup albumGroup)
+            else if (_selectedAlbums.Count > 0)
             {
-                selectedFiles.AddRange(albumGroup.Tracks);
+                // Use multiselected albums (all tracks from selected albums)
+                selectedFiles.AddRange(_selectedAlbums.SelectMany(album => album.Tracks));
+            }
+            else
+            {
+                // Fall back to TreeView selection for backward compatibility
+                var selectedItem = MainTreeView.SelectedItem;
+                if (selectedItem is AudioFileInfo audioFile)
+                {
+                    selectedFiles.Add(audioFile);
+                }
+                else if (selectedItem is AlbumGroup albumGroup)
+                {
+                    selectedFiles.AddRange(albumGroup.Tracks);
+                }
             }
 
             if (!selectedFiles.Any())
@@ -1099,17 +1464,29 @@ namespace TID3.Views
                 return;
             }
 
-            var result = MessageBox.Show($"Are you sure you want to update {selectedFiles.Count} files?",
+            // Skip confirmation dialog if only updating album cover
+            var onlyUpdatingCover = changes.Count == 1 && changes.ContainsKey("UpdateAlbumCover");
+            var result = MessageBoxResult.Yes; // Default to Yes
+            
+            if (!onlyUpdatingCover)
+            {
+                result = MessageBox.Show($"Are you sure you want to update {selectedFiles.Count} files?",
                                        "Confirm Batch Update",
                                        MessageBoxButton.YesNo,
                                        MessageBoxImage.Question);
+            }
 
             if (result == MessageBoxResult.Yes)
             {
                 try
                 {
                     ApplyBatchChanges(selectedFiles, changes);
-                    MessageBox.Show($"Successfully updated {selectedFiles.Count} files!");
+                    
+                    // Only show success message if not just updating cover art
+                    if (!onlyUpdatingCover)
+                    {
+                        MessageBox.Show($"Successfully updated {selectedFiles.Count} files!");
+                    }
                     
                     // Refresh data binding
                     OnPropertyChanged(nameof(AudioFiles));
@@ -1150,11 +1527,19 @@ namespace TID3.Views
             if (BatchCleanupCheck.IsChecked == true)
                 changes["CleanupTags"] = true;
 
+            if (BatchAlbumCoverCheck.IsChecked == true)
+                changes["UpdateAlbumCover"] = true;
+
             return changes;
         }
 
         private void ApplyBatchChanges(List<AudioFileInfo> files, Dictionary<string, object> changes)
         {
+            // Check if we should save cover art once per album
+            var saveCoverArt = changes.ContainsKey("UpdateAlbumCover");
+            var replaceCoverArt = IsInBatchMode() ? BatchReplaceCoverArtCheckBox.IsChecked == true : ReplaceCoverArtCheckBox.IsChecked == true;
+            var albumsCoverSaved = new HashSet<string>(); // Track which albums have had cover art saved
+
             for (int i = 0; i < files.Count; i++)
             {
                 var file = files[i];
@@ -1187,11 +1572,27 @@ namespace TID3.Views
                     if (string.IsNullOrWhiteSpace(file.Comment)) file.Comment = "";
                 }
 
-                // Save the file
-                var (success, coverArtSaved) = _tagService.SaveFile(file);
+                // Determine if we should save cover art for this file
+                bool saveCoverForThisFile = false;
+                if (saveCoverArt && file.AlbumCover != null)
+                {
+                    // Create a unique album identifier
+                    var albumKey = $"{file.Artist?.Trim()}|{file.Album?.Trim()}";
+                    
+                    // Only save cover art once per unique album
+                    if (!string.IsNullOrEmpty(albumKey) && !albumsCoverSaved.Contains(albumKey))
+                    {
+                        saveCoverForThisFile = true;
+                        albumsCoverSaved.Add(albumKey);
+                        System.Diagnostics.Debug.WriteLine($"Will save cover art for album: {albumKey}");
+                    }
+                }
+
+                // Save the file (with or without cover art)
+                var (success, coverArtSaved) = _tagService.SaveFile(file, replaceCoverArt && saveCoverForThisFile);
                 if (coverArtSaved)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Cover art saved to album folder for batch edit: {file.FileName}");
+                    System.Diagnostics.Debug.WriteLine($"Cover art saved to album folder for: {file.Album} by {file.Artist}");
                 }
             }
         }
@@ -1209,6 +1610,10 @@ namespace TID3.Views
             BatchAlbumArtistText.Text = "";
             BatchGenreText.Text = "";
             BatchYearText.Text = "";
+            
+            // Reset cover art checkboxes to their default state
+            BatchReplaceCoverArtCheckBox.IsChecked = true;
+            BatchAlbumCoverCheck.IsChecked = false;
         }
 
         #endregion
@@ -1302,16 +1707,6 @@ namespace TID3.Views
             }
         }
 
-        private void BatchCoverSourceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            var comboBox = sender as ComboBox;
-            var selectedCover = comboBox?.SelectedItem as CoverSource;
-            if (selectedCover != null)
-            {
-                _selectedBatchCoverSource = selectedCover.Name;
-                UpdateBatchAlbumCoverDisplay();
-            }
-        }
 
         private void UpdateStatus(string message)
         {
@@ -1473,20 +1868,66 @@ namespace TID3.Views
             return _audioFiles.Where(file => file.TagComparison != null && file.TagComparison.Any(c => c.IsAccepted && !c.IsRejected)).Any();
         }
 
+        private void RefreshOnlineSourceResults()
+        {
+            if (_selectedFile == null) return;
+            
+            // Get all cached results for the current file
+            var cachedResults = _cacheManager.GetResults(_selectedFile.FilePath);
+            
+            // Clear and re-populate with sorted results
+            _onlineSourceItems.Clear();
+            var sortedResults = cachedResults
+                .OrderByDescending(result => ExtractScoreFromDisplayName(result.DisplayName))
+                .ThenBy(result => result.DisplayName);
+            
+            foreach (var result in sortedResults)
+            {
+                // Force ScoreCategory recalculation for existing items by triggering the getter
+                _ = result.ScoreCategory; // This triggers the getter calculation
+                _onlineSourceItems.Add(result);
+            }
+        }
+
+        private double ExtractScoreFromDisplayName(string displayName)
+        {
+            // Extract percentage score from strings like "[85.2%]" or "[92%]"
+            var match = System.Text.RegularExpressions.Regex.Match(displayName, @"\[(\d+\.?\d*)%\]");
+            if (match.Success && double.TryParse(match.Groups[1].Value, out double score))
+            {
+                return score;
+            }
+            return 0.0; // Default score for items without explicit scores
+        }
+
+
         #endregion
 
         private List<AudioFileInfo> GetSelectedFiles()
         {
-            var selectedItem = MainTreeView.SelectedItem;
             var selectedFiles = new List<AudioFileInfo>();
 
-            if (selectedItem is AudioFileInfo audioFile)
+            // Check multiselect collections first (priority over TreeView selection)
+            if (_selectedFiles.Count > 0)
             {
-                selectedFiles.Add(audioFile);
+                selectedFiles.AddRange(_selectedFiles);
             }
-            else if (selectedItem is AlbumGroup albumGroup)
+            else if (_selectedAlbums.Count > 0)
             {
-                selectedFiles.AddRange(albumGroup.Tracks);
+                selectedFiles.AddRange(_selectedAlbums.SelectMany(album => album.Tracks));
+            }
+            else
+            {
+                // Fall back to TreeView selection for backward compatibility
+                var selectedItem = MainTreeView.SelectedItem;
+                if (selectedItem is AudioFileInfo audioFile)
+                {
+                    selectedFiles.Add(audioFile);
+                }
+                else if (selectedItem is AlbumGroup albumGroup)
+                {
+                    selectedFiles.AddRange(albumGroup.Tracks);
+                }
             }
 
             return selectedFiles;
@@ -1506,21 +1947,25 @@ namespace TID3.Views
                 System.Windows.Media.Imaging.BitmapImage? coverImage = null;
                 string coverSource = "";
 
+                string sourceName = "";
+                
                 if (selectedSource.SourceType == "MusicBrainz" && selectedSource.Source is MusicBrainzRelease mbRelease)
                 {
                     coverImage = mbRelease.CoverArtImage;
                     coverSource = "MusicBrainz Cover Art Archive";
+                    sourceName = "MusicBrainz";
                 }
                 else if (selectedSource.SourceType == "Discogs" && selectedSource.Source is DiscogsRelease discogsRelease)
                 {
                     coverImage = discogsRelease.CoverArtImage;
                     coverSource = "Discogs";
+                    sourceName = "Discogs";
                 }
 
                 if (coverImage != null)
                 {
                     // Add the online cover to the available covers collection
-                    targetFile.AddOnlineCover(selectedSource.SourceType, coverImage, coverSource);
+                    targetFile.AddOnlineCover(sourceName, coverImage, coverSource);
                     
                     System.Diagnostics.Debug.WriteLine($"Cover art loaded from {coverSource} for {targetFile.FileName}");
                     
@@ -1531,6 +1976,101 @@ namespace TID3.Views
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error updating cover art: {ex.Message}");
+            }
+        }
+
+        private async Task SearchMultiSourceCoverArtAsync(AudioFileInfo file)
+        {
+            if (file == null || string.IsNullOrEmpty(file.Artist) || string.IsNullOrEmpty(file.Album))
+            {
+                System.Diagnostics.Debug.WriteLine($"Skipping cover art search - missing artist or album info");
+                return;
+            }
+
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"Searching multi-source cover art for: {file.Artist} - {file.Album}");
+                Console.WriteLine($"=== Starting cover art search for: {file.Artist} - {file.Album} ===");
+                
+                var coverSources = await _coverArtService.SearchCoverArtAsync(file.Artist, file.Album);
+                
+                System.Diagnostics.Debug.WriteLine($"CoverArtService returned {coverSources.Count} sources");
+                
+                foreach (var coverSource in coverSources)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Processing cover source: {coverSource.Name}, HasImage: {coverSource.Image != null}");
+                    
+                    if (coverSource.Image != null)
+                    {
+                        file.AddOnlineCover(coverSource.Name, coverSource.Image, coverSource.Source);
+                        System.Diagnostics.Debug.WriteLine($"Added cover from {coverSource.Name} for {file.FileName}");
+                    }
+                }
+
+                if (coverSources.Count > 0)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Found {coverSources.Count} cover art sources for {file.FileName}");
+                    
+                    // Update batch editor if multiple files are selected
+                    UpdateBatchAlbumCover();
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"No cover art found for {file.FileName}");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error searching multi-source cover art: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Exception details: {ex}");
+            }
+        }
+
+        private async Task SearchMultiSourceCoverArtForAlbumAsync(AudioFileInfo sampleFile, List<AudioFileInfo> tracksInAlbum)
+        {
+            if (sampleFile == null || string.IsNullOrEmpty(sampleFile.Artist) || string.IsNullOrEmpty(sampleFile.Album))
+            {
+                System.Diagnostics.Debug.WriteLine($"Skipping cover art search - missing artist or album info");
+                return;
+            }
+
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"Searching multi-source cover art for album: {sampleFile.Artist} - {sampleFile.Album} ({tracksInAlbum.Count} tracks)");
+                Console.WriteLine($"=== Starting cover art search for album: {sampleFile.Artist} - {sampleFile.Album} ({tracksInAlbum.Count} tracks) ===");
+                
+                var coverSources = await _coverArtService.SearchCoverArtAsync(sampleFile.Artist, sampleFile.Album);
+                
+                System.Diagnostics.Debug.WriteLine($"CoverArtService returned {coverSources.Count} sources for album");
+                
+                // Apply the found cover sources to ALL tracks in this album
+                foreach (var track in tracksInAlbum)
+                {
+                    foreach (var coverSource in coverSources)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Processing cover source: {coverSource.Name}, HasImage: {coverSource.Image != null}");
+                        
+                        if (coverSource.Image != null)
+                        {
+                            track.AddOnlineCover(coverSource.Name, coverSource.Image, coverSource.Source);
+                            System.Diagnostics.Debug.WriteLine($"Added cover from {coverSource.Name} for {track.FileName}");
+                        }
+                    }
+                }
+
+                if (coverSources.Count > 0)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Found {coverSources.Count} cover art sources for album {sampleFile.Album}, applied to {tracksInAlbum.Count} tracks");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"No cover art found for album {sampleFile.Album}");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error searching multi-source cover art for album: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Exception details: {ex}");
             }
         }
 
@@ -1547,6 +2087,175 @@ namespace TID3.Views
                     tempGroup.Tracks.Add(file);
                 }
                 UpdateBatchAlbumCover(tempGroup);
+            }
+        }
+
+        private bool IsInBatchMode()
+        {
+            return BatchEditPanel.Visibility == Visibility.Visible;
+        }
+
+        private async void BatchSearchCoverArt_Click(object sender, RoutedEventArgs e)
+        {
+            var selectedFiles = GetSelectedFiles();
+            
+            if (selectedFiles.Count == 0)
+            {
+                MessageBox.Show("Please select one or more files to search for cover art.", 
+                              "No Selection", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            // Disable the button during search
+            if (sender is Button button)
+            {
+                button.IsEnabled = false;
+                button.Content = "🔍 Searching...";
+            }
+
+            try
+            {
+                var searchTasks = new List<Task>();
+                
+                // Group files by album to avoid duplicate searches
+                var albumGroups = selectedFiles
+                    .Where(f => !string.IsNullOrEmpty(f.Artist) && !string.IsNullOrEmpty(f.Album))
+                    .GroupBy(f => $"{f.Artist}|{f.Album}")
+                    .ToList();
+
+                foreach (var group in albumGroups)
+                {
+                    var firstFile = group.First();
+                    var tracksInAlbum = group.ToList();
+                    
+                    // Search once per album and apply results to all tracks in that album
+                    searchTasks.Add(SearchMultiSourceCoverArtForAlbumAsync(firstFile, tracksInAlbum));
+                }
+
+                if (searchTasks.Count > 0)
+                {
+                    await Task.WhenAll(searchTasks);
+                    
+                    // Count unique cover source names across all selected files
+                    var uniqueCoverSources = selectedFiles
+                        .SelectMany(f => f.AvailableCovers.Select(c => c.Name))
+                        .Distinct()
+                        .Count();
+                    
+                    MessageBox.Show($"Cover art search completed!\nFound {uniqueCoverSources} cover sources for {albumGroups.Count} album(s).", 
+                                  "Search Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                    // Update batch cover display
+                    UpdateBatchAlbumCover();
+                }
+                else
+                {
+                    MessageBox.Show("No files with both artist and album information found.", 
+                                  "Search Skipped", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error searching for cover art: {ex.Message}", 
+                              "Search Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Diagnostics.Debug.WriteLine($"Batch cover art search error: {ex}");
+            }
+            finally
+            {
+                // Re-enable the button
+                if (sender is Button btn)
+                {
+                    btn.IsEnabled = true;
+                    btn.Content = "🔍 Search Cover Art";
+                }
+            }
+        }
+
+        private void BatchCoverSourceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (BatchCoverSourceComboBox.SelectedItem is CoverSource selectedCover)
+            {
+                // Update the tracking variable
+                _selectedBatchCoverSource = selectedCover.Name;
+                
+                var selectedFiles = GetSelectedFiles();
+                
+                // Apply the selected cover to all selected files that belong to the same album
+                foreach (var file in selectedFiles)
+                {
+                    if (file.AvailableCovers.Any(c => c.Name == selectedCover.Name))
+                    {
+                        file.SelectedCoverSource = selectedCover.Name;
+                    }
+                }
+
+                // Update the batch display WITHOUT calling UpdateBatchAlbumCover() to avoid recursion
+                UpdateBatchAlbumCoverDisplay();
+            }
+        }
+
+        private async void SearchCoverArt_Click(object sender, RoutedEventArgs e)
+        {
+            var selectedFiles = GetSelectedFiles();
+            
+            if (selectedFiles.Count == 0)
+            {
+                MessageBox.Show("Please select one or more files to search for cover art.", 
+                              "No Selection", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            // Disable the button during search
+            if (sender is Button button)
+            {
+                button.IsEnabled = false;
+                button.Content = "🔍 Searching...";
+            }
+
+            try
+            {
+                var searchTasks = new List<Task>();
+                
+                // Group files by album to avoid duplicate searches
+                var albumGroups = selectedFiles
+                    .Where(f => !string.IsNullOrEmpty(f.Artist) && !string.IsNullOrEmpty(f.Album))
+                    .GroupBy(f => $"{f.Artist}|{f.Album}")
+                    .ToList();
+
+                foreach (var group in albumGroups)
+                {
+                    var firstFile = group.First();
+                    searchTasks.Add(SearchMultiSourceCoverArtAsync(firstFile));
+                }
+
+                if (searchTasks.Count > 0)
+                {
+                    await Task.WhenAll(searchTasks);
+                    
+                    var totalCoversFound = selectedFiles.Sum(f => f.AvailableCovers.Count);
+                    MessageBox.Show($"Cover art search completed!\nFound {totalCoversFound} cover sources for {albumGroups.Count} album(s).", 
+                                  "Search Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    MessageBox.Show("No files with both artist and album information found.", 
+                                  "Search Skipped", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error searching for cover art: {ex.Message}", 
+                              "Search Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Diagnostics.Debug.WriteLine($"Cover art search error: {ex}");
+            }
+            finally
+            {
+                // Re-enable the button
+                if (sender is Button btn)
+                {
+                    btn.IsEnabled = true;
+                    btn.Content = "🔍 Search Cover Art";
+                }
             }
         }
 
@@ -1661,12 +2370,16 @@ namespace TID3.Views
 
         private void AddOnlineSourceResult(OnlineSourceItem result, AudioFileInfo targetFile)
         {
-            _onlineSourceItems.Add(result);
-            
             // Update cache for the target file
             var currentResults = _cacheManager.GetResults(targetFile.FilePath);
             currentResults.Add(result);
             _cacheManager.StoreResults(targetFile.FilePath, currentResults);
+            
+            // If this is the currently selected file, refresh the sorted results
+            if (SelectedFile?.FilePath == targetFile.FilePath)
+            {
+                RefreshOnlineSourceResults();
+            }
         }
 
         private void ClearOnlineSourceResults(string sourceType, AudioFileInfo? specificFile = null)

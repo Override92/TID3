@@ -162,6 +162,10 @@ namespace TID3.Utils
 
         [JsonPropertyName("standardize_separators")]
         public bool StandardizeSeparators { get; set; } = true;
+
+        // Cover Art Settings
+        [JsonPropertyName("cover_art_settings")]
+        public Models.CoverArtSourceSettings CoverArtSettings { get; set; } = new Models.CoverArtSourceSettings();
     }
 
     public class SettingsManager

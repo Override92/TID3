@@ -6,7 +6,7 @@
 
 **Professional ID3 tag editor with batch processing and online database integration**
 
-[![.NET](https://img.shields.io/badge/.NET-8.0-5C2D91?style=flat-square&logo=.net)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-9.0-5C2D91?style=flat-square&logo=.net)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/Windows-11%20Ready-0078D4?style=flat-square&logo=windows)](https://www.microsoft.com/windows/)
 [![WPF](https://img.shields.io/badge/WPF-Modern%20UI-2D5699?style=flat-square)](https://docs.microsoft.com/en-us/dotnet/desktop/wpf/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
@@ -55,7 +55,7 @@
 
 ### Prerequisites
 - Windows 10/11
-- .NET 8.0 Runtime
+- .NET 9.0 Runtime
 - **For Fingerprinting**: Chromaprint (fpcalc.exe) - [Setup Guide](FINGERPRINTING_SETUP.md)
 
 ### First Steps
@@ -70,19 +70,19 @@
 ## 📊 Project Status
 
 ### ✅ Completed Features
-- ✅ Core tag editing functionality
-- ✅ Multi-format audio file support
-- ✅ **Audio fingerprinting with AcoustID/Chromaprint**
-- ✅ MusicBrainz API integration
-- ✅ Discogs API integration
-- ✅ Advanced matching algorithm
-- ✅ Tag comparison system with change tracking
-- ✅ Windows 11 modern UI design
-- ✅ Settings management
-- ✅ **Album cover management system**
+ ✅ Core tag editing functionality
+ ✅ Multi-format audio file support
+ ✅ **Audio fingerprinting with AcoustID/Chromaprint**
+ ✅ MusicBrainz API integration
+ ✅ Discogs API integration
+ ✅ Advanced matching algorithm
+ ✅ Tag comparison system with change tracking
+ ✅ Windows 11 modern UI design
+ ✅ Settings management
+ ✅ **Album cover management system**
   - Local vs online cover source selection
   - Resolution indicator display
-- ✅ **Enhanced batch editing capabilities**
+ ✅ **Enhanced batch editing capabilities**
   - Batch cover source selection
   - Unified cover management across single and batch modes
 
@@ -108,7 +108,7 @@ dotnet build
 
 ### Requirements
 - Visual Studio 2022 or VS Code
-- .NET 8.0 SDK
+- .NET 9.0 SDK
 - Windows 10/11 for WPF development
 
 ### Architecture Overview
