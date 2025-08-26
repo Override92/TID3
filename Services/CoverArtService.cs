@@ -33,38 +33,29 @@ namespace TID3.Services
 
         public async Task<List<CoverSource>> SearchCoverArtAsync(string artist, string album)
         {
-            Console.WriteLine($"CoverArtService.SearchCoverArtAsync called for: '{artist}' - '{album}'");
             var coverSources = new List<CoverSource>();
             var tasks = new List<Task<CoverSource?>>();
 
             // Only search enabled sources
-            Console.WriteLine($"Checking enabled sources...");
-            Console.WriteLine($"LastFm enabled: {_settings.IsSourceEnabled(CoverSourceType.LastFm)}");
-            Console.WriteLine($"Spotify enabled: {_settings.IsSourceEnabled(CoverSourceType.Spotify)}");
-            Console.WriteLine($"iTunes enabled: {_settings.IsSourceEnabled(CoverSourceType.ITunes)}");
-            Console.WriteLine($"Deezer enabled: {_settings.IsSourceEnabled(CoverSourceType.Deezer)}");
+            
             
             if (_settings.IsSourceEnabled(CoverSourceType.LastFm))
             {
-                Console.WriteLine("Adding LastFm search task");
                 tasks.Add(SearchLastFmCoverAsync(artist, album));
             }
             
             if (_settings.IsSourceEnabled(CoverSourceType.Spotify))
             {
-                Console.WriteLine("Adding Spotify search task");
                 tasks.Add(SearchSpotifyCoverAsync(artist, album));
             }
             
             if (_settings.IsSourceEnabled(CoverSourceType.ITunes))
             {
-                Console.WriteLine("Adding iTunes search task");
                 tasks.Add(SearchITunesCoverAsync(artist, album));
             }
             
             if (_settings.IsSourceEnabled(CoverSourceType.Deezer))
             {
-                Console.WriteLine("Adding Deezer search task");
                 tasks.Add(SearchDeezerCoverAsync(artist, album));
             }
 
@@ -84,6 +75,7 @@ namespace TID3.Services
             coverSources.Sort((a, b) => 
                 _settings.GetPriority(b.SourceType).CompareTo(_settings.GetPriority(a.SourceType)));
 
+            TID3Logger.Debug("Images", "Cover art search completed", new { SourceCount = coverSources.Count }, "CoverArtService");
             return coverSources;
         }
 
@@ -126,7 +118,7 @@ namespace TID3.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Last.fm cover search failed: {ex.Message}");
+                TID3Logger.Warning("Images", "Last.fm cover search failed", ex, component: "CoverArtService");
             }
 
             return null;
@@ -155,7 +147,7 @@ namespace TID3.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Spotify cover search failed: {ex.Message}");
+                TID3Logger.Warning("Images", "Spotify cover search failed", ex, component: "CoverArtService");
             }
 
             return null;
@@ -184,7 +176,7 @@ namespace TID3.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"iTunes cover search failed: {ex.Message}");
+                TID3Logger.Warning("Images", "iTunes cover search failed", ex, component: "CoverArtService");
             }
 
             return null;
@@ -213,7 +205,7 @@ namespace TID3.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Deezer cover search failed: {ex.Message}");
+                TID3Logger.Warning("Images", "Deezer cover search failed", ex, component: "CoverArtService");
             }
 
             return null;
@@ -223,22 +215,12 @@ namespace TID3.Services
         {
             try
             {
-                var response = await HttpClientManager.CoverArt.GetAsync(imageUrl);
-                if (response.IsSuccessStatusCode)
-                {
-                    using var stream = await response.Content.ReadAsStreamAsync();
-                    var bitmap = new BitmapImage();
-                    bitmap.BeginInit();
-                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmap.StreamSource = stream;
-                    bitmap.EndInit();
-                    bitmap.Freeze();
-                    return bitmap;
-                }
+                var result = await ImageHelper.CreateBitmapFromHttpStreamAsync(imageUrl, HttpClientManager.CoverArt);
+                return result;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Failed to load image from {imageUrl}: {ex.Message}");
+                TID3Logger.Error("Images", "Failed to load image from URL", ex, new { ImageUrl = imageUrl }, "CoverArtService");
             }
 
             return null;
@@ -294,9 +276,9 @@ namespace TID3.Services
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"Last.fm API error: {ex.Message}");
+                // Ignore API failures
             }
 
             return null;
@@ -332,16 +314,7 @@ namespace TID3.Services
                 var query = Uri.EscapeDataString($"artist:{artist} album:{album}");
                 var url = $"{BASE_URL}search?q={query}&type=album&limit=10"; // Get more results for better matching
                 
-                System.Diagnostics.Debug.WriteLine($"Spotify search URL: {url}");
-                System.Diagnostics.Debug.WriteLine($"Searching for: Artist='{artist}', Album='{album}'");
-                Console.WriteLine($"Spotify search URL: {url}");
-                Console.WriteLine($"Searching for: Artist='{artist}', Album='{album}'");
-                
-                // Write to log file for debugging
-                var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "TID3_Debug.log");
-                File.AppendAllText(logPath, $"\n=== SPOTIFY SEARCH ===\n");
-                File.AppendAllText(logPath, $"Search URL: {url}\n");
-                File.AppendAllText(logPath, $"Searching for: Artist='{artist}', Album='{album}'\n");
+                TID3Logger.Debug("Images", "Starting Spotify search", new { Artist = artist, Album = album, Url = url }, "CoverArtService");
                 
                 using var request = new HttpRequestMessage(HttpMethod.Get, url);
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _accessToken);
@@ -354,10 +327,7 @@ namespace TID3.Services
                     albums.TryGetProperty("items", out var items) &&
                     items.GetArrayLength() > 0)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Spotify returned {items.GetArrayLength()} album results");
-                    Console.WriteLine($"Spotify returned {items.GetArrayLength()} album results");
                     
-                    File.AppendAllText(logPath, $"Spotify returned {items.GetArrayLength()} album results\n");
                     
                     // Find the best matching album
                     foreach (var albumElement in items.EnumerateArray())
@@ -375,21 +345,16 @@ namespace TID3.Services
                                 if (artistElement.TryGetProperty("name", out var artistNameElement))
                                 {
                                     var artistName = artistNameElement.GetString() ?? "";
-                                    System.Diagnostics.Debug.WriteLine($"  Result: '{albumName}' by '{artistName}'");
-                                    Console.WriteLine($"  Result: '{albumName}' by '{artistName}'");
                                     
-                                    File.AppendAllText(logPath, $"  Result: '{albumName}' by '{artistName}'\n");
                                     
                                     if (IsGoodMatch(artist, artistName))
                                     {
                                         artistFound = true;
                                         matchingArtistName = artistName;
-                                        System.Diagnostics.Debug.WriteLine($"    Artist match: '{artist}' ≈ '{artistName}'");
                                         break;
                                     }
                                     else
                                     {
-                                        System.Diagnostics.Debug.WriteLine($"    Artist no match: '{artist}' ≠ '{artistName}'");
                                     }
                                 }
                             }
@@ -398,11 +363,9 @@ namespace TID3.Services
                             var albumMatches = IsGoodMatch(album, albumName);
                             if (albumMatches)
                             {
-                                System.Diagnostics.Debug.WriteLine($"    Album match: '{album}' ≈ '{albumName}'");
                             }
                             else
                             {
-                                System.Diagnostics.Debug.WriteLine($"    Album no match: '{album}' ≠ '{albumName}'");
                             }
                             
                             // If artist matches and album name is a good match
@@ -414,27 +377,21 @@ namespace TID3.Services
                                     var firstImage = images[0];
                                     if (firstImage.TryGetProperty("url", out var urlElement))
                                     {
-                                        System.Diagnostics.Debug.WriteLine($"✓ Spotify match found: '{albumName}' by '{matchingArtistName}'");
-                                        Console.WriteLine($"✓ Spotify match found: '{albumName}' by '{matchingArtistName}'");
+                                        TID3Logger.Debug("Images", "Spotify match found", new { AlbumName = albumName, ArtistName = matchingArtistName }, "CoverArtService");
                                         
-                                        File.AppendAllText(logPath, $"✓ SPOTIFY MATCH FOUND: '{albumName}' by '{matchingArtistName}'\n");
-                                        return urlElement.GetString();
+                                                                return urlElement.GetString();
                                     }
                                 }
                             }
                         }
                     }
                     
-                    System.Diagnostics.Debug.WriteLine($"✗ Spotify: No good match found for '{album}' by '{artist}'");
-                    Console.WriteLine($"✗ Spotify: No good match found for '{album}' by '{artist}'");
-                    
-                    var logPath2 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "TID3_Debug.log");
-                    File.AppendAllText(logPath2, $"✗ SPOTIFY: No good match found for '{album}' by '{artist}'\n");
-                }
+                        
+                    }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"Spotify API error: {ex.Message}");
+                // Ignore API failures
             }
 
             return null;
@@ -470,27 +427,23 @@ namespace TID3.Services
                         var expiresInSeconds = expiresInElement.GetInt32();
                         _tokenExpiry = DateTime.UtcNow.AddSeconds(expiresInSeconds - 30); // 30 second buffer
                         
-                        System.Diagnostics.Debug.WriteLine($"Spotify token acquired, expires at: {_tokenExpiry}");
                     }
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine($"Spotify token request failed: {tokenResponse.StatusCode}");
+                    TID3Logger.Warning("HTTP", "Spotify token request failed", new { StatusCode = tokenResponse.StatusCode }, "CoverArtService");
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Spotify token request error: {ex.Message}");
+                TID3Logger.Error("HTTP", "Spotify token request error", ex, component: "CoverArtService");
             }
         }
 
         private static bool IsGoodMatch(string expected, string actual)
         {
-            var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "TID3_Debug.log");
-            
             if (string.IsNullOrWhiteSpace(expected) || string.IsNullOrWhiteSpace(actual))
             {
-                System.Diagnostics.Debug.WriteLine($"      IsGoodMatch: Empty string - '{expected}' vs '{actual}' = false");
                 return false;
             }
 
@@ -498,13 +451,10 @@ namespace TID3.Services
             var normalizedExpected = NormalizeForComparison(expected);
             var normalizedActual = NormalizeForComparison(actual);
             
-            System.Diagnostics.Debug.WriteLine($"      IsGoodMatch: Normalized '{expected}' → '{normalizedExpected}', '{actual}' → '{normalizedActual}'");
-            File.AppendAllText(logPath, $"      Matching: '{expected}' vs '{actual}'\n");
 
             // Exact match (case-insensitive)
             if (normalizedExpected.Equals(normalizedActual, StringComparison.OrdinalIgnoreCase))
             {
-                System.Diagnostics.Debug.WriteLine($"      IsGoodMatch: Exact match = true");
                 return true;
             }
 
@@ -518,13 +468,9 @@ namespace TID3.Services
                 var rejectKeywords = new[] { "remix", "remixe", "live", "acoustic", "instrumental", "karaoke", "cover" };
                 if (rejectKeywords.Any(keyword => suffix.Contains(keyword)))
                 {
-                    System.Diagnostics.Debug.WriteLine($"      IsGoodMatch: Starts with match but contains reject keyword '{suffix}' = false");
-                    File.AppendAllText(logPath, $"      REJECTED: '{normalizedActual}' contains reject keyword in '{suffix}'\n");
                     return false;
                 }
                 
-                System.Diagnostics.Debug.WriteLine($"      IsGoodMatch: Starts with match = true");
-                File.AppendAllText(logPath, $"      ACCEPTED: '{normalizedActual}' starts with '{normalizedExpected}'\n");
                 return true;
             }
 
@@ -538,12 +484,10 @@ namespace TID3.Services
                 var result = expectedWords.All(word => 
                     actualWords.Any(actualWord => 
                         actualWord.Equals(word, StringComparison.OrdinalIgnoreCase)));
-                System.Diagnostics.Debug.WriteLine($"      IsGoodMatch: Multi-word match ({expectedWords.Length} words) = {result}");
                 return result;
             }
 
             // For single words, be more strict to avoid "Lasso" matching "Lasso-Remixe"
-            System.Diagnostics.Debug.WriteLine($"      IsGoodMatch: Single word, strict match = false");
             return false;
         }
 
@@ -577,8 +521,13 @@ namespace TID3.Services
                 var term = Uri.EscapeDataString($"{artist} {album}");
                 var url = $"{BASE_URL}?term={term}&entity=album&limit=20"; // Get more results for better matching
                 
-                System.Diagnostics.Debug.WriteLine($"iTunes API call: {url}");
                 var response = await HttpClientManager.CoverArt.GetStringAsync(url);
+                
+                if (string.IsNullOrEmpty(response))
+                {
+                    return null;
+                }
+                
                 using var doc = JsonDocument.Parse(response);
                 
                 if (doc.RootElement.TryGetProperty("results", out var results))
@@ -597,19 +546,17 @@ namespace TID3.Services
                             // Check for good match
                             if (IsGoodMatch(artist, artistName) && IsGoodMatch(album, albumName) && !string.IsNullOrEmpty(artworkUrl))
                             {
-                                System.Diagnostics.Debug.WriteLine($"iTunes match: '{albumName}' by '{artistName}' (requested: '{album}' by '{artist}')");
                                 // Convert to high resolution by replacing "100x100" with "600x600"
                                 return artworkUrl.Replace("100x100", "600x600");
                             }
                         }
                     }
                     
-                    System.Diagnostics.Debug.WriteLine($"iTunes: No good match found for '{album}' by '{artist}'");
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"iTunes API error: {ex.Message}");
+                // Ignore API failures
             }
 
             return null;
@@ -678,7 +625,6 @@ namespace TID3.Services
                 var query = Uri.EscapeDataString($"{artist} {album}");
                 var url = $"{BASE_URL}search/album?q={query}&limit=20"; // Get more results for better matching
                 
-                System.Diagnostics.Debug.WriteLine($"Deezer API call: {url}");
                 var response = await HttpClientManager.CoverArt.GetStringAsync(url);
                 using var doc = JsonDocument.Parse(response);
                 
@@ -704,18 +650,16 @@ namespace TID3.Services
                             // Check for good match
                             if (IsGoodMatch(artist, artistName) && IsGoodMatch(album, albumName) && !string.IsNullOrEmpty(coverUrl))
                             {
-                                System.Diagnostics.Debug.WriteLine($"Deezer match: '{albumName}' by '{artistName}' (requested: '{album}' by '{artist}')");
                                 return coverUrl;
                             }
                         }
                     }
                     
-                    System.Diagnostics.Debug.WriteLine($"Deezer: No good match found for '{album}' by '{artist}'");
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"Deezer API error: {ex.Message}");
+                // Ignore API failures
             }
 
             return null;

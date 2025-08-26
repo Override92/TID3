@@ -16,6 +16,7 @@ namespace TID3.Utils
         {
             return _clients.GetOrAdd(name, _ => new Lazy<HttpClient>(() =>
             {
+                TID3Logger.Debug("HTTP", "Creating new HTTP client", new { ClientName = name }, "HttpClientManager");
                 var client = new HttpClient();
                 client.Timeout = TimeSpan.FromSeconds(30);
                 configure?.Invoke(client);
@@ -65,31 +66,58 @@ namespace TID3.Utils
 
         public static async Task<HttpResponseMessage?> SafeGetAsync(this HttpClient client, string url, int maxRetries = 3, int delayMs = 1000)
         {
+            var startTime = DateTime.Now;
+            TID3Logger.Http.LogRequest(url, "Unknown", "HttpClientManager");
+            
             for (int attempt = 0; attempt < maxRetries; attempt++)
             {
                 try
                 {
                     var response = await client.GetAsync(url);
+                    var duration = DateTime.Now - startTime;
+                    TID3Logger.Http.LogResponse(url, (int)response.StatusCode, response.Content.Headers.ContentLength, duration, "HttpClientManager");
                     return response;
                 }
                 catch (HttpRequestException ex) when (attempt < maxRetries - 1)
                 {
-                    System.Diagnostics.Debug.WriteLine($"HTTP request failed (attempt {attempt + 1}/{maxRetries}): {ex.Message}");
+                    TID3Logger.Warning("HTTP", "HTTP request failed, retrying", new { 
+                        Url = url,
+                        Attempt = attempt + 1,
+                        MaxRetries = maxRetries,
+                        ErrorMessage = ex.Message
+                    }, "HttpClientManager");
                     await Task.Delay(delayMs * (attempt + 1)); // Exponential backoff
                 }
                 catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException || !ex.CancellationToken.IsCancellationRequested)
                 {
-                    System.Diagnostics.Debug.WriteLine($"HTTP request timed out (attempt {attempt + 1}/{maxRetries}): {ex.Message}");
+                    TID3Logger.Warning("HTTP", "HTTP request timed out, retrying", new {
+                        Url = url,
+                        Attempt = attempt + 1,
+                        MaxRetries = maxRetries,
+                        ErrorMessage = ex.Message
+                    }, "HttpClientManager");
                     if (attempt < maxRetries - 1)
                         await Task.Delay(delayMs * (attempt + 1));
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Unexpected error in HTTP request (attempt {attempt + 1}/{maxRetries}): {ex.Message}");
+                    TID3Logger.Error("HTTP", "Unexpected error in HTTP request", ex, new {
+                        Url = url,
+                        Attempt = attempt + 1,
+                        MaxRetries = maxRetries
+                    }, "HttpClientManager");
                     if (attempt < maxRetries - 1)
                         await Task.Delay(delayMs);
                 }
             }
+            
+            var finalDuration = DateTime.Now - startTime;
+            TID3Logger.Error("HTTP", "All retry attempts failed", null, new {
+                Url = url,
+                MaxRetries = maxRetries,
+                TotalDurationMs = finalDuration.TotalMilliseconds
+            }, "HttpClientManager");
+            
             return null;
         }
 

@@ -96,7 +96,7 @@ namespace TID3.Views
             catch (Exception ex)
             {
                 // Silent fail - dark title bar is not critical
-                System.Diagnostics.Debug.WriteLine($"Failed to apply dark title bar: {ex.Message}");
+                TID3Logger.Warning("UI", "Failed to apply dark title bar", ex, component: "MainWindow");
             }
         }
         
@@ -266,7 +266,7 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Scrollbar optimization error: {ex.Message}");
+                TID3Logger.Warning("UI", "Scrollbar optimization error", ex, component: "MainWindow");
             }
         }
 
@@ -296,7 +296,7 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Scrollbar optimization timer error: {ex.Message}");
+                TID3Logger.Warning("UI", "Scrollbar optimization timer error", ex, component: "MainWindow");
             }
         }
 
@@ -316,7 +316,7 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error saving window state: {ex.Message}");
+                TID3Logger.Warning("UI", "Error saving window state", ex, component: "MainWindow");
             }
         }
 
@@ -339,7 +339,7 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error handling location change: {ex.Message}");
+                TID3Logger.Warning("UI", "Error handling window location change", ex, component: "MainWindow");
             }
         }
 
@@ -364,7 +364,7 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error saving window location: {ex.Message}");
+                TID3Logger.Warning("UI", "Error saving window location", ex, component: "MainWindow");
             }
         }
 
@@ -381,7 +381,6 @@ namespace TID3.Views
             if (sender is CheckBox checkBox && checkBox.DataContext is AlbumGroup albumGroup)
             {
                 bool isChecked = checkBox.IsChecked == true;
-                System.Diagnostics.Debug.WriteLine($"AlbumCheckBox_Click: Album '{albumGroup.Album}', IsChecked: {isChecked}");
                 
                 if (isChecked)
                 {
@@ -395,7 +394,6 @@ namespace TID3.Views
                     {
                         _selectedAlbums.Add(albumGroup);
                         albumGroup.IsSelected = true;
-                        System.Diagnostics.Debug.WriteLine($"Added album to selection. Total selected albums: {_selectedAlbums.Count}");
                     }
                 }
                 else
@@ -403,7 +401,6 @@ namespace TID3.Views
                     // Album is being deselected
                     _selectedAlbums.Remove(albumGroup);
                     albumGroup.IsSelected = false;
-                    System.Diagnostics.Debug.WriteLine($"Removed album from selection. Total selected albums: {_selectedAlbums.Count}");
                 }
                 
                 UpdateSelectionProperties();
@@ -415,7 +412,6 @@ namespace TID3.Views
             if (sender is CheckBox checkBox && checkBox.DataContext is AudioFileInfo track)
             {
                 bool isChecked = checkBox.IsChecked == true;
-                System.Diagnostics.Debug.WriteLine($"TrackCheckBox_Click: Track '{track.Title}', IsChecked: {isChecked}");
                 
                 if (isChecked)
                 {
@@ -432,7 +428,6 @@ namespace TID3.Views
                     {
                         _selectedFiles.Add(track);
                         track.IsSelected = true;
-                        System.Diagnostics.Debug.WriteLine($"Added track to selection. Total selected files: {_selectedFiles.Count}");
                     }
                 }
                 else
@@ -440,7 +435,6 @@ namespace TID3.Views
                     // Track is being deselected
                     _selectedFiles.Remove(track);
                     track.IsSelected = false;
-                    System.Diagnostics.Debug.WriteLine($"Removed track from selection. Total selected files: {_selectedFiles.Count}");
                 }
                 
                 UpdateSelectionProperties();
@@ -593,6 +587,11 @@ namespace TID3.Views
 
         private async void LoadFilesAsync(string[] filePaths)
         {
+            using var scope = TID3Logger.BeginScope("Files", "LoadFilesAsync", new { 
+                FileCount = filePaths.Length,
+                FirstFile = filePaths.FirstOrDefault()
+            }, "MainWindow");
+            
             try
             {
                 // Filter out already loaded files
@@ -602,7 +601,7 @@ namespace TID3.Views
                 
                 if (duplicateCount > 0)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Skipped {duplicateCount} duplicate file{(duplicateCount != 1 ? "s" : "")} already loaded");
+                    TID3Logger.Info("Files", "Skipped duplicate files", new { DuplicateCount = duplicateCount }, "MainWindow");
                 }
                 
                 if (newFilePaths.Length == 0)
@@ -687,7 +686,7 @@ namespace TID3.Views
                         catch (Exception ex)
                         {
                             // Log individual file errors but continue processing
-                            System.Diagnostics.Debug.WriteLine($"Error loading file {fileName}: {ex.Message}");
+                            TID3Logger.Error("Files", "Error loading audio file", ex, new { FileName = fileName }, "MainWindow");
                             Interlocked.Increment(ref processedCount); // Still count failed files for progress
                         }
                     });
@@ -1152,7 +1151,7 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error updating batch album cover: {ex.Message}");
+                TID3Logger.Error("Images", "Error updating batch album cover", ex, component: "MainWindow");
                 BatchAlbumCoverImage.Source = null;
                 BatchAlbumCoverText.Text = "Error Loading Cover";
                 BatchAlbumCoverText.Visibility = Visibility.Visible;
@@ -1172,7 +1171,7 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error updating batch album cover for selected tracks: {ex.Message}");
+                TID3Logger.Error("Images", "Error updating batch album cover for selected tracks", ex, component: "MainWindow");
                 BatchAlbumCoverImage.Source = null;
                 BatchAlbumCoverText.Text = "Error Loading Cover";
                 BatchAlbumCoverText.Visibility = Visibility.Visible;
@@ -1278,7 +1277,7 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error updating batch cover display: {ex.Message}");
+                TID3Logger.Error("Images", "Error updating batch cover display", ex, component: "MainWindow");
                 BatchAlbumCoverImage.Source = null;
                 BatchAlbumCoverText.Text = "Error Loading Cover";
                 BatchAlbumCoverText.Visibility = Visibility.Visible;
@@ -1305,7 +1304,7 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error clearing batch album cover: {ex.Message}");
+                TID3Logger.Error("Images", "Error clearing batch album cover", ex, component: "MainWindow");
             }
         }
         
@@ -1330,7 +1329,7 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error clearing batch field values: {ex.Message}");
+                TID3Logger.Error("UI", "Error clearing batch field values", ex, component: "MainWindow");
             }
         }
 
@@ -1418,7 +1417,7 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error updating batch field values: {ex.Message}");
+                TID3Logger.Error("UI", "Error updating batch field values", ex, component: "MainWindow");
             }
         }
 
@@ -1584,7 +1583,6 @@ namespace TID3.Views
                     {
                         saveCoverForThisFile = true;
                         albumsCoverSaved.Add(albumKey);
-                        System.Diagnostics.Debug.WriteLine($"Will save cover art for album: {albumKey}");
                     }
                 }
 
@@ -1592,7 +1590,7 @@ namespace TID3.Views
                 var (success, coverArtSaved) = _tagService.SaveFile(file, replaceCoverArt && saveCoverForThisFile);
                 if (coverArtSaved)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Cover art saved to album folder for: {file.Album} by {file.Artist}");
+                    TID3Logger.Info("Images", "Cover art saved to album folder", new { Album = file.Album, Artist = file.Artist }, "MainWindow");
                 }
             }
         }
@@ -1967,7 +1965,7 @@ namespace TID3.Views
                     // Add the online cover to the available covers collection
                     targetFile.AddOnlineCover(sourceName, coverImage, coverSource);
                     
-                    System.Diagnostics.Debug.WriteLine($"Cover art loaded from {coverSource} for {targetFile.FileName}");
+                    TID3Logger.Debug("Images", "Cover art loaded successfully", new { CoverSource = coverSource, FileName = targetFile.FileName }, "MainWindow");
                     
                     // Update batch editor if multiple files are selected
                     UpdateBatchAlbumCover();
@@ -1975,7 +1973,7 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error updating cover art: {ex.Message}");
+                TID3Logger.Error("Images", "Error updating cover art", ex, component: "MainWindow");
             }
         }
 
@@ -1983,46 +1981,40 @@ namespace TID3.Views
         {
             if (file == null || string.IsNullOrEmpty(file.Artist) || string.IsNullOrEmpty(file.Album))
             {
-                System.Diagnostics.Debug.WriteLine($"Skipping cover art search - missing artist or album info");
+                TID3Logger.Debug("Images", "Skipping cover art search - missing metadata", component: "MainWindow");
                 return;
             }
 
             try
             {
-                System.Diagnostics.Debug.WriteLine($"Searching multi-source cover art for: {file.Artist} - {file.Album}");
-                Console.WriteLine($"=== Starting cover art search for: {file.Artist} - {file.Album} ===");
                 
                 var coverSources = await _coverArtService.SearchCoverArtAsync(file.Artist, file.Album);
                 
-                System.Diagnostics.Debug.WriteLine($"CoverArtService returned {coverSources.Count} sources");
                 
                 foreach (var coverSource in coverSources)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Processing cover source: {coverSource.Name}, HasImage: {coverSource.Image != null}");
                     
                     if (coverSource.Image != null)
                     {
                         file.AddOnlineCover(coverSource.Name, coverSource.Image, coverSource.Source);
-                        System.Diagnostics.Debug.WriteLine($"Added cover from {coverSource.Name} for {file.FileName}");
                     }
                 }
 
                 if (coverSources.Count > 0)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Found {coverSources.Count} cover art sources for {file.FileName}");
+                    TID3Logger.Info("Images", "Found cover art sources", new { SourceCount = coverSources.Count, FileName = file.FileName }, "MainWindow");
                     
                     // Update batch editor if multiple files are selected
                     UpdateBatchAlbumCover();
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine($"No cover art found for {file.FileName}");
+                    TID3Logger.Debug("Images", "No cover art found", new { FileName = file.FileName }, "MainWindow");
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error searching multi-source cover art: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"Exception details: {ex}");
+                TID3Logger.Error("Images", "Error searching multi-source cover art", ex, component: "MainWindow");
             }
         }
 
@@ -2030,47 +2022,40 @@ namespace TID3.Views
         {
             if (sampleFile == null || string.IsNullOrEmpty(sampleFile.Artist) || string.IsNullOrEmpty(sampleFile.Album))
             {
-                System.Diagnostics.Debug.WriteLine($"Skipping cover art search - missing artist or album info");
+                TID3Logger.Debug("Images", "Skipping cover art search - missing metadata", component: "MainWindow");
                 return;
             }
 
             try
             {
-                System.Diagnostics.Debug.WriteLine($"Searching multi-source cover art for album: {sampleFile.Artist} - {sampleFile.Album} ({tracksInAlbum.Count} tracks)");
-                Console.WriteLine($"=== Starting cover art search for album: {sampleFile.Artist} - {sampleFile.Album} ({tracksInAlbum.Count} tracks) ===");
                 
                 var coverSources = await _coverArtService.SearchCoverArtAsync(sampleFile.Artist, sampleFile.Album);
                 
-                System.Diagnostics.Debug.WriteLine($"CoverArtService returned {coverSources.Count} sources for album");
                 
                 // Apply the found cover sources to ALL tracks in this album
                 foreach (var track in tracksInAlbum)
                 {
                     foreach (var coverSource in coverSources)
                     {
-                        System.Diagnostics.Debug.WriteLine($"Processing cover source: {coverSource.Name}, HasImage: {coverSource.Image != null}");
-                        
+                            
                         if (coverSource.Image != null)
                         {
                             track.AddOnlineCover(coverSource.Name, coverSource.Image, coverSource.Source);
-                            System.Diagnostics.Debug.WriteLine($"Added cover from {coverSource.Name} for {track.FileName}");
                         }
                     }
                 }
 
                 if (coverSources.Count > 0)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Found {coverSources.Count} cover art sources for album {sampleFile.Album}, applied to {tracksInAlbum.Count} tracks");
+                    TID3Logger.Info("Images", "Applied cover art to album tracks", new { Album = sampleFile.Album, SourceCount = coverSources.Count, TrackCount = tracksInAlbum.Count }, "MainWindow");
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine($"No cover art found for album {sampleFile.Album}");
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error searching multi-source cover art for album: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"Exception details: {ex}");
+                TID3Logger.Error("Images", "Error searching multi-source cover art for album", ex, component: "MainWindow");
             }
         }
 
@@ -2167,7 +2152,7 @@ namespace TID3.Views
             {
                 MessageBox.Show($"Error searching for cover art: {ex.Message}", 
                               "Search Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                System.Diagnostics.Debug.WriteLine($"Batch cover art search error: {ex}");
+                TID3Logger.Error("Images", "Batch cover art search error", ex, component: "MainWindow");
             }
             finally
             {
@@ -2267,7 +2252,7 @@ namespace TID3.Views
             {
                 MessageBox.Show($"Error searching for cover art: {ex.Message}", 
                               "Search Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                System.Diagnostics.Debug.WriteLine($"Cover art search error: {ex}");
+                TID3Logger.Error("Images", "Cover art search error", ex, component: "MainWindow");
             }
             finally
             {
@@ -2361,7 +2346,7 @@ namespace TID3.Views
                                         }
                                         catch (Exception ex)
                                         {
-                                            System.Diagnostics.Debug.WriteLine($"Error loading MusicBrainz cover art: {ex.Message}");
+                                            TID3Logger.Warning("Images", "Error loading MusicBrainz cover art", ex, component: "MainWindow");
                                         }
                                     });
                                 }
@@ -2625,7 +2610,7 @@ namespace TID3.Views
                                             }
                                             catch (Exception ex)
                                             {
-                                                System.Diagnostics.Debug.WriteLine($"Error loading Discogs cover art: {ex.Message}");
+                                                TID3Logger.Warning("Images", "Error loading Discogs cover art", ex, component: "MainWindow");
                                             }
                                         });
                                     }
@@ -2701,7 +2686,7 @@ namespace TID3.Views
             catch (Exception ex)
             {
                 // Silently handle errors in match score calculation
-                System.Diagnostics.Debug.WriteLine($"Error updating match scores: {ex.Message}");
+                TID3Logger.Error("UI", "Error updating match scores", ex, component: "MainWindow");
             }
         }
 
@@ -3132,9 +3117,11 @@ namespace TID3.Views
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)
         {
+            TID3Logger.Info("Application", "MainWindow loaded, initializing application", component: "MainWindow");
             await CheckForUpdatesOnStartup();
             LoadWindowAndColumnSettings();
             UpdateEditorPanelVisibility();
+            TID3Logger.Info("Application", "MainWindow initialization completed", component: "MainWindow");
         }
 
         private void LoadWindowAndColumnSettings()
@@ -3186,19 +3173,19 @@ namespace TID3.Views
             }
             catch (InvalidOperationException ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error loading window/column settings: {ex.Message}");
+                TID3Logger.Warning("UI", "Error loading window/column settings", ex, component: "MainWindow");
                 // Fallback to default window state
                 WindowStartupLocation = WindowStartupLocation.CenterScreen;
             }
             catch (ArgumentException ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Invalid window/column settings: {ex.Message}");
+                TID3Logger.Warning("UI", "Invalid window/column settings", ex, component: "MainWindow");
                 // Fallback to default window state
                 WindowStartupLocation = WindowStartupLocation.CenterScreen;
             }
             catch (System.ComponentModel.Win32Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Win32 error loading settings: {ex.Message}");
+                TID3Logger.Warning("UI", "Win32 error loading settings", ex, component: "MainWindow");
                 // Fallback to default window state
                 WindowStartupLocation = WindowStartupLocation.CenterScreen;
             }
@@ -3270,7 +3257,7 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error restoring column widths: {ex.Message}");
+                TID3Logger.Warning("UI", "Error restoring column widths", ex, component: "MainWindow");
             }
         }
 
@@ -3322,7 +3309,7 @@ namespace TID3.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error saving window/column settings: {ex.Message}");
+                TID3Logger.Warning("UI", "Error saving window/column settings", ex, component: "MainWindow");
             }
         }
 

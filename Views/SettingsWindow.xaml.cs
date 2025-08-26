@@ -612,7 +612,7 @@ namespace TID3.Views
             {
                 LastFmTestStatus.Text = $"✗ Error: {ex.Message}";
                 LastFmTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(220, 53, 69)); // Red
-                System.Diagnostics.Debug.WriteLine($"Last.fm test error: {ex}");
+                TID3Logger.Warning("HTTP", "Last.fm test error", ex, component: "SettingsWindow");
             }
             finally
             {
@@ -712,7 +712,7 @@ namespace TID3.Views
             {
                 SpotifyTestStatus.Text = $"✗ Error: {ex.Message}";
                 SpotifyTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(220, 53, 69)); // Red
-                System.Diagnostics.Debug.WriteLine($"Spotify test error: {ex}");
+                TID3Logger.Warning("HTTP", "Spotify test error", ex, component: "SettingsWindow");
             }
             finally
             {

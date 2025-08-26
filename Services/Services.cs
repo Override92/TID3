@@ -160,7 +160,7 @@ namespace TID3.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error getting MusicBrainz cover art: {ex.Message}");
+                TID3Logger.Warning("Images", "Error getting MusicBrainz cover art", ex, component: "TagService");
             }
             return null;
         }
@@ -172,23 +172,11 @@ namespace TID3.Services
                 
             try
             {
-                var response = await HttpClientManager.MusicBrainz.SafeGetAsync(imageUrl);
-                if (response?.IsSuccessStatusCode == true)
-                {
-                    var imageData = await response.Content.ReadAsByteArrayAsync();
-                    var bitmapImage = new BitmapImage();
-                    bitmapImage.BeginInit();
-                    bitmapImage.StreamSource = new MemoryStream(imageData);
-                    bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmapImage.DecodePixelWidth = 200; // Optimize for display size
-                    bitmapImage.EndInit();
-                    bitmapImage.Freeze(); // Make it cross-thread accessible
-                    return bitmapImage;
-                }
+                return await ImageHelper.CreateBitmapFromUrlAsync(imageUrl, HttpClientManager.MusicBrainz);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error loading cover art image: {ex.Message}");
+                TID3Logger.Warning("Images", "Error loading cover art image", ex, component: "TagService");
             }
             return null;
         }
@@ -505,9 +493,12 @@ namespace TID3.Services
     {
         public AudioFileInfo? LoadFile(string filePath)
         {
+            using var scope = TID3Logger.BeginScope("Files", "LoadFile", new { FileName = Path.GetFileName(filePath) }, "TagService");
+            TID3Logger.Images.LogFileInfo(filePath, "TagService");
             try
             {
                 using var file = TagLib.File.Create(filePath);
+                TID3Logger.Debug("Tags", "TagLib file created successfully", component: "TagService");
                 
                 // Cache tag and properties references to avoid repeated property access
                 var tag = file.Tag;
@@ -530,12 +521,22 @@ namespace TID3.Services
                     LocalCover = LoadAlbumCover(tag) ?? LoadCoverArtFromFolder(filePath),
                     CoverArtSource = GetCoverArtSource(tag, filePath)
                 };
+                TID3Logger.Debug("Tags", "Returning AudioFileInfo", new { 
+                    HasLocalCover = audioFile.LocalCover != null,
+                    Title = audioFile.Title,
+                    Artist = audioFile.Artist,
+                    Album = audioFile.Album
+                }, "TagService");
+                if (audioFile.LocalCover != null)
+                {
+                    TID3Logger.Images.LogImageDetails(audioFile.LocalCover, "Final LocalCover", "TagService");
+                }
                 return audioFile;
             }
             catch (Exception ex)
             {
                 // Log error but don't show MessageBox in parallel context
-                System.Diagnostics.Debug.WriteLine($"Error loading file {filePath}: {ex.Message}");
+                TID3Logger.Error("Files", "Error loading file", ex, new { FilePath = filePath }, "TagService");
                 return null;
             }
         }
@@ -596,7 +597,7 @@ namespace TID3.Services
                 bool coverArtSaved = SaveCoverArtToFolder(audioFile, replaceExistingCoverArt);
                 if (coverArtSaved)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Cover art saved to album folder for: {audioFile.FileName}");
+                    TID3Logger.Info("Images", "Cover art saved to album folder", new { FileName = audioFile.FileName }, "TagService");
                 }
                 
                 return (true, coverArtSaved);
@@ -630,28 +631,51 @@ namespace TID3.Services
 
         private BitmapImage? LoadAlbumCover(Tag tag)
         {
+            using var scope = TID3Logger.BeginScope("Images", "LoadAlbumCover", component: "TagService");
             try
             {
+                if (tag == null)
+                {
+                    TID3Logger.Debug("Images", "Tag is NULL - cannot load embedded cover", component: "TagService");
+                    return null;
+                }
+
+                TID3Logger.Debug("Images", "Tag pictures info", new { 
+                    HasPictures = tag.Pictures != null,
+                    PictureCount = tag.Pictures?.Length ?? 0
+                }, "TagService");
+                
                 if (tag.Pictures != null && tag.Pictures.Length > 0)
                 {
                     var picture = tag.Pictures[0]; // Get the first image
-                    if (picture.Data?.Data != null && picture.Data.Count > 0)
+                    TID3Logger.Debug("Images", "Processing first embedded picture", new {
+                        Type = picture?.Type.ToString(),
+                        MimeType = picture?.MimeType,
+                        DataSizeBytes = picture?.Data?.Count ?? 0,
+                        Description = picture?.Description
+                    }, "TagService");
+                    
+                    var result = ImageHelper.CreateBitmapFromTagPicture(picture);
+                    if (result != null)
                     {
-                        var bitmapImage = new BitmapImage();
-                        bitmapImage.BeginInit();
-                        bitmapImage.StreamSource = new MemoryStream(picture.Data.Data);
-                        bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
-                        bitmapImage.DecodePixelWidth = 200; // Optimize for display size
-                        bitmapImage.EndInit();
-                        bitmapImage.Freeze(); // Make it cross-thread accessible
-                        return bitmapImage;
+                        TID3Logger.Images.LogImageDetails(result, "LoadAlbumCover result", "TagService");
                     }
+                    else
+                    {
+                        TID3Logger.Warning("Images", "Failed to create bitmap from embedded picture", component: "TagService");
+                    }
+                    return result;
+                }
+                else
+                {
+                    TID3Logger.Debug("Images", "No pictures found in tag - will try folder fallback", component: "TagService");
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error loading album cover: {ex.Message}");
+                TID3Logger.Error("Images", "LoadAlbumCover failed", ex, component: "TagService");
             }
+            TID3Logger.Debug("Images", "LoadAlbumCover returning null", component: "TagService");
             return null;
         }
 
@@ -702,18 +726,23 @@ namespace TID3.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error checking cover art source: {ex.Message}");
+                TID3Logger.Warning("Images", "Error checking cover art source", ex, component: "TagService");
             }
             return "";
         }
 
         public BitmapImage? LoadCoverArtFromFolder(string audioFilePath)
         {
+            using var scope = TID3Logger.BeginScope("Images", "LoadCoverArtFromFolder", new { AudioFile = Path.GetFileName(audioFilePath) }, "TagService");
             try
             {
                 var folderPath = Path.GetDirectoryName(audioFilePath);
+                TID3Logger.Debug("Images", "Checking folder for cover art", new { FolderPath = folderPath }, "TagService");
                 if (string.IsNullOrEmpty(folderPath))
+                {
+                    TID3Logger.Debug("Images", "FolderPath is null/empty - cannot search for folder covers", component: "TagService");
                     return null;
+                }
 
                 // Common cover art filenames in order of preference
                 string[] coverArtNames = {
@@ -726,14 +755,29 @@ namespace TID3.Services
                 };
 
                 // First, try standard names
+                TID3Logger.Debug("Images", "Trying standard cover filenames", new { FileNames = coverArtNames }, "TagService");
                 foreach (var fileName in coverArtNames)
                 {
                     var coverPath = SecureCombinePath(folderPath, fileName);
                     if (coverPath != null && System.IO.File.Exists(coverPath))
                     {
-                        return LoadImageFromFile(coverPath);
+                        TID3Logger.Debug("Images", "Found standard cover file", new { FileName = fileName, FilePath = coverPath }, "TagService");
+                        TID3Logger.Images.LogFileInfo(coverPath, "TagService");
+                        
+                        var result = LoadImageFromFile(coverPath);
+                        
+                        if (result != null)
+                        {
+                            TID3Logger.Images.LogImageDetails(result, "Folder cover result", "TagService");
+                            return result;
+                        }
+                        else
+                        {
+                            TID3Logger.Warning("Images", "Failed to load standard cover file", new { FilePath = coverPath }, "TagService");
+                        }
                     }
                 }
+                TID3Logger.Debug("Images", "No standard cover files found, searching for any image files", component: "TagService");
 
                 // If no standard names found, look for any image files
                 var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif" };
@@ -761,7 +805,7 @@ namespace TID3.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error loading cover art from folder: {ex.Message}");
+                TID3Logger.Warning("Images", "Error loading cover art from folder", ex, component: "TagService");
             }
 
             return null;
@@ -771,39 +815,21 @@ namespace TID3.Services
         {
             try
             {
-                // First, get the original dimensions without resizing
-                int originalWidth, originalHeight;
-                using (var stream = new FileStream(imagePath, FileMode.Open, FileAccess.Read))
-                {
-                    var tempImage = new BitmapImage();
-                    tempImage.BeginInit();
-                    tempImage.StreamSource = stream;
-                    tempImage.CacheOption = BitmapCacheOption.OnLoad;
-                    tempImage.EndInit();
-                    originalWidth = tempImage.PixelWidth;
-                    originalHeight = tempImage.PixelHeight;
-                }
-
-                // Now create the display-optimized image
-                var bitmapImage = new BitmapImage();
-                bitmapImage.BeginInit();
-                bitmapImage.UriSource = new Uri(imagePath);
-                bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
-                bitmapImage.DecodePixelWidth = 200; // Optimize for display size
-                bitmapImage.EndInit();
-                bitmapImage.Freeze(); // Make it cross-thread accessible
+                // Create the display-optimized image (dimensions are handled by ImageHelper)
+                var bitmapImage = ImageHelper.CreateBitmapFromFile(imagePath);
+                if (bitmapImage == null)
+                    return null;
                 
-                // Store original dimensions in metadata for resolution display
-                bitmapImage.SetValue(OriginalWidthProperty, originalWidth);
-                bitmapImage.SetValue(OriginalHeightProperty, originalHeight);
+                // Get the stored dimensions for logging
+                var (originalWidth, originalHeight) = ImageHelper.GetOriginalDimensions(bitmapImage);
                 
-                System.Diagnostics.Debug.WriteLine($"LoadImageFromFile: {imagePath} - Original: {originalWidth}×{originalHeight}, Resized: {bitmapImage.PixelWidth}×{bitmapImage.PixelHeight}");
+                TID3Logger.Debug("Images", "Image loaded from file", new { FilePath = imagePath, OriginalWidth = originalWidth, OriginalHeight = originalHeight, ResizedWidth = bitmapImage.PixelWidth, ResizedHeight = bitmapImage.PixelHeight }, "TagService");
                 
                 return bitmapImage;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error loading image from file {imagePath}: {ex.Message}");
+                TID3Logger.Error("Images", "Error loading image from file", ex, new { FilePath = imagePath }, "TagService");
                 return null;
             }
         }
@@ -883,7 +909,7 @@ namespace TID3.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error getting folder cover art source: {ex.Message}");
+                TID3Logger.Warning("Images", "Error getting folder cover art source", ex, component: "TagService");
             }
 
             return "";
@@ -891,28 +917,34 @@ namespace TID3.Services
 
         public bool SaveCoverArtToFolder(AudioFileInfo audioFile, bool replaceExisting = false)
         {
+            using var scope = TID3Logger.BeginScope("Images", "SaveCoverArtToFolder", new {
+                FileName = audioFile.FileName,
+                CoverSource = audioFile.CoverArtSource,
+                HasCover = audioFile.AlbumCover != null,
+                ReplaceExisting = replaceExisting
+            }, "TagService");
+
             try
             {
-                var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "TID3_Debug.log");
-                System.IO.File.AppendAllText(logPath, $"\n=== SAVE COVER ART ===\n");
-                System.IO.File.AppendAllText(logPath, $"File: {audioFile.FileName}\n");
-                System.IO.File.AppendAllText(logPath, $"Replace existing: {replaceExisting}\n");
-                System.IO.File.AppendAllText(logPath, $"Cover source: '{audioFile.CoverArtSource}'\n");
-                System.IO.File.AppendAllText(logPath, $"Has cover: {audioFile.AlbumCover != null}\n");
-                
                 // Only save cover art if it's from an online source (not embedded or already from folder)
                 if (audioFile.AlbumCover == null || 
                     audioFile.CoverArtSource == "Embedded in file" || 
                     audioFile.CoverArtSource.StartsWith("Folder file:") ||
                     string.IsNullOrEmpty(audioFile.CoverArtSource))
                 {
-                    System.IO.File.AppendAllText(logPath, $"SKIPPED: Not an online source\n");
+                    TID3Logger.Debug("Images", "Skipping cover art save - not an online source", new {
+                        CoverSource = audioFile.CoverArtSource,
+                        HasCover = audioFile.AlbumCover != null
+                    }, "TagService");
                     return false;
                 }
 
                 var folderPath = Path.GetDirectoryName(audioFile.FilePath);
                 if (string.IsNullOrEmpty(folderPath))
+                {
+                    TID3Logger.Warning("Images", "Cannot determine folder path for cover art save", component: "TagService");
                     return false;
+                }
 
                 // Create filename for cover art
                 string coverFileName = GetCoverArtFileName(audioFile);
@@ -920,32 +952,40 @@ namespace TID3.Services
                 
                 if (coverFilePath == null)
                 {
-                    System.IO.File.AppendAllText(logPath, $"FAILED: Invalid path combination - {folderPath} + {coverFileName}\n");
+                    TID3Logger.Error("Images", "Invalid path combination for cover art", null, new {
+                        FolderPath = folderPath,
+                        CoverFileName = coverFileName
+                    }, "TagService");
                     return false;
                 }
 
-                System.IO.File.AppendAllText(logPath, $"Chosen filename: {coverFileName}\n");
-                System.IO.File.AppendAllText(logPath, $"Target file: {coverFilePath}\n");
+                TID3Logger.Debug("Images", "Cover art save path determined", new {
+                    CoverFileName = coverFileName,
+                    TargetFilePath = coverFilePath
+                }, "TagService");
                 
                 // Check if file exists and whether we should replace it
                 if (System.IO.File.Exists(coverFilePath))
                 {
-                    System.IO.File.AppendAllText(logPath, $"File exists, replace={replaceExisting}\n");
                     if (!replaceExisting)
                     {
-                        System.Diagnostics.Debug.WriteLine($"Cover art file already exists: {coverFilePath}");
-                        System.IO.File.AppendAllText(logPath, $"SKIPPED: File exists and replace=false\n");
+                        TID3Logger.Debug("Images", "Cover art file already exists and replace=false", new {
+                            FilePath = coverFilePath
+                        }, "TagService");
                         return false;
                     }
                     else
                     {
-                        System.Diagnostics.Debug.WriteLine($"Replacing existing cover art file: {coverFilePath}");
-                        System.IO.File.AppendAllText(logPath, $"REPLACING: File exists but replace=true\n");
+                        TID3Logger.Debug("Images", "Replacing existing cover art file", new {
+                            FilePath = coverFilePath
+                        }, "TagService");
                     }
                 }
                 else
                 {
-                    System.IO.File.AppendAllText(logPath, $"File does not exist, will create new\n");
+                    TID3Logger.Debug("Images", "Creating new cover art file", new {
+                        FilePath = coverFilePath
+                    }, "TagService");
                 }
 
                 // Convert BitmapImage to byte array and save
@@ -953,17 +993,23 @@ namespace TID3.Services
                 if (imageBytes != null && imageBytes.Length > 0)
                 {
                     System.IO.File.WriteAllBytes(coverFilePath, imageBytes);
-                    System.Diagnostics.Debug.WriteLine($"Saved cover art to: {coverFilePath} (Source: {audioFile.CoverArtSource})");
-                    System.IO.File.AppendAllText(logPath, $"SUCCESS: Saved {imageBytes.Length} bytes to {coverFilePath}\n");
+                    TID3Logger.Info("Images", "Successfully saved cover art to folder", new {
+                        FilePath = coverFilePath,
+                        ByteCount = imageBytes.Length,
+                        CoverSource = audioFile.CoverArtSource
+                    }, "TagService");
                     return true;
                 }
                 
-                System.IO.File.AppendAllText(logPath, $"FAILED: No image bytes to save\n");
+                TID3Logger.Warning("Images", "Failed to get image bytes for cover art save", component: "TagService");
                 return false;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error saving cover art to folder: {ex.Message}");
+                TID3Logger.Error("Images", "Error saving cover art to folder", ex, new {
+                    FilePath = audioFile.FilePath,
+                    CoverSource = audioFile.CoverArtSource
+                }, "TagService");
                 return false;
             }
         }
@@ -1014,30 +1060,81 @@ namespace TID3.Services
         private byte[]? BitmapImageToByteArray(System.Windows.Media.Imaging.BitmapImage? bitmapImage)
         {
             if (bitmapImage == null)
+            {
+                TID3Logger.Warning("Images", "BitmapImage is null, cannot convert to byte array", component: "TagService");
                 return null;
+            }
+
+            using var scope = TID3Logger.BeginScope("Images", "BitmapImageToByteArray", component: "TagService");
 
             try
             {
+                TID3Logger.Debug("Images", "Converting BitmapImage to byte array", new {
+                    HasStreamSource = bitmapImage.StreamSource != null,
+                    CanReadStream = bitmapImage.StreamSource?.CanRead ?? false,
+                    PixelWidth = bitmapImage.PixelWidth,
+                    PixelHeight = bitmapImage.PixelHeight,
+                    IsFrozen = bitmapImage.IsFrozen
+                }, "TagService");
+
+                // First try to get stored original bytes (best quality)
+                var originalBytes = ImageHelper.GetOriginalImageBytes(bitmapImage);
+                if (originalBytes != null && originalBytes.Length > 0)
+                {
+                    TID3Logger.Debug("Images", "Using stored original image bytes", new { 
+                        ByteCount = originalBytes.Length 
+                    }, "TagService");
+                    return originalBytes;
+                }
+
                 // Try to get the original source stream if available
                 if (bitmapImage.StreamSource != null && bitmapImage.StreamSource.CanRead)
                 {
-                    bitmapImage.StreamSource.Position = 0;
-                    using var memoryStream = new MemoryStream();
-                    bitmapImage.StreamSource.CopyTo(memoryStream);
-                    return memoryStream.ToArray();
+                    try
+                    {
+                        bitmapImage.StreamSource.Position = 0;
+                        using var memoryStream = new MemoryStream();
+                        bitmapImage.StreamSource.CopyTo(memoryStream);
+                        var bytes = memoryStream.ToArray();
+                        TID3Logger.Debug("Images", "Successfully extracted bytes from StreamSource", new { 
+                            ByteCount = bytes.Length 
+                        }, "TagService");
+                        return bytes;
+                    }
+                    catch (Exception streamEx)
+                    {
+                        TID3Logger.Warning("Images", "Failed to read from StreamSource, falling back to encoding", streamEx, component: "TagService");
+                    }
+                }
+                else
+                {
+                    TID3Logger.Debug("Images", "StreamSource not available, using encoder fallback", component: "TagService");
                 }
 
                 // Fallback: encode as JPEG
                 var encoder = new System.Windows.Media.Imaging.JpegBitmapEncoder();
+                encoder.QualityLevel = 95; // High quality
                 encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmapImage));
                 
                 using var stream = new MemoryStream();
                 encoder.Save(stream);
-                return stream.ToArray();
+                var encodedBytes = stream.ToArray();
+                
+                TID3Logger.Debug("Images", "Successfully encoded BitmapImage to JPEG", new { 
+                    ByteCount = encodedBytes.Length,
+                    QualityLevel = encoder.QualityLevel
+                }, "TagService");
+                
+                return encodedBytes;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error converting bitmap to byte array: {ex.Message}");
+                TID3Logger.Error("Images", "Error converting bitmap to byte array", ex, new {
+                    HasStreamSource = bitmapImage.StreamSource != null,
+                    IsFrozen = bitmapImage.IsFrozen,
+                    PixelWidth = bitmapImage.PixelWidth,
+                    PixelHeight = bitmapImage.PixelHeight
+                }, "TagService");
                 return null;
             }
         }
@@ -1069,7 +1166,7 @@ namespace TID3.Services
                 if (!combinedPath.StartsWith(basePath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
                     !combinedPath.Equals(basePath, StringComparison.OrdinalIgnoreCase))
                 {
-                    System.Diagnostics.Debug.WriteLine($"Path traversal attempt blocked: {relativePath}");
+                    TID3Logger.Warning("Security", "Path traversal attempt blocked", new { RelativePath = relativePath }, "TagService");
                     return null;
                 }
                 
@@ -1077,7 +1174,7 @@ namespace TID3.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error in SecureCombinePath: {ex.Message}");
+                TID3Logger.Error("Security", "Error in SecureCombinePath", ex, component: "TagService");
                 return null;
             }
         }
