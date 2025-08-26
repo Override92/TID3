@@ -686,8 +686,8 @@ namespace TID3.Services
 
                     foreach (var fileName in coverArtNames)
                     {
-                        var coverPath = Path.Combine(folderPath, fileName);
-                        if (System.IO.File.Exists(coverPath))
+                        var coverPath = SecureCombinePath(folderPath, fileName);
+                        if (coverPath != null && System.IO.File.Exists(coverPath))
                         {
                             return $"Local file: {fileName}";
                         }
@@ -734,8 +734,8 @@ namespace TID3.Services
                 // First, try standard names
                 foreach (var fileName in coverArtNames)
                 {
-                    var coverPath = Path.Combine(folderPath, fileName);
-                    if (System.IO.File.Exists(coverPath))
+                    var coverPath = SecureCombinePath(folderPath, fileName);
+                    if (coverPath != null && System.IO.File.Exists(coverPath))
                     {
                         return LoadImageFromFile(coverPath);
                     }
@@ -868,8 +868,8 @@ namespace TID3.Services
 
                 foreach (var fileName in coverArtNames)
                 {
-                    var coverPath = Path.Combine(folderPath, fileName);
-                    if (System.IO.File.Exists(coverPath))
+                    var coverPath = SecureCombinePath(folderPath, fileName);
+                    if (coverPath != null && System.IO.File.Exists(coverPath))
                     {
                         return $"Folder file: {fileName}";
                     }
@@ -922,7 +922,13 @@ namespace TID3.Services
 
                 // Create filename for cover art
                 string coverFileName = GetCoverArtFileName(audioFile);
-                string coverFilePath = Path.Combine(folderPath, coverFileName);
+                string? coverFilePath = SecureCombinePath(folderPath, coverFileName);
+                
+                if (coverFilePath == null)
+                {
+                    System.IO.File.AppendAllText(logPath, $"FAILED: Invalid path combination - {folderPath} + {coverFileName}\n");
+                    return false;
+                }
 
                 System.IO.File.AppendAllText(logPath, $"Chosen filename: {coverFileName}\n");
                 System.IO.File.AppendAllText(logPath, $"Target file: {coverFilePath}\n");
@@ -978,7 +984,8 @@ namespace TID3.Services
                 // First, check if there's already a local cover art file that we should replace
                 foreach (var name in commonNames)
                 {
-                    if (System.IO.File.Exists(Path.Combine(folderPath, name)))
+                    var existingPath = SecureCombinePath(folderPath, name);
+                    if (existingPath != null && System.IO.File.Exists(existingPath))
                     {
                         return name; // Use the existing file name to replace it
                     }
@@ -1037,6 +1044,46 @@ namespace TID3.Services
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error converting bitmap to byte array: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Securely combines paths while preventing directory traversal attacks
+        /// </summary>
+        /// <param name="basePath">The base directory path</param>
+        /// <param name="relativePath">The relative path to combine</param>
+        /// <returns>Combined path if safe, null if path traversal detected</returns>
+        private static string? SecureCombinePath(string basePath, string relativePath)
+        {
+            if (string.IsNullOrEmpty(basePath) || string.IsNullOrEmpty(relativePath))
+                return null;
+
+            try
+            {
+                // Normalize the base path
+                basePath = Path.GetFullPath(basePath);
+                
+                // Sanitize the relative path - remove any path traversal attempts
+                relativePath = relativePath.Replace("..", "").Replace("/", "\\");
+                relativePath = Path.GetFileName(relativePath); // Only allow filename, no subdirectories
+                
+                // Combine and normalize the full path
+                string combinedPath = Path.GetFullPath(Path.Combine(basePath, relativePath));
+                
+                // Ensure the combined path is still within the base directory
+                if (!combinedPath.StartsWith(basePath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+                    !combinedPath.Equals(basePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    System.Diagnostics.Debug.WriteLine($"Path traversal attempt blocked: {relativePath}");
+                    return null;
+                }
+                
+                return combinedPath;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in SecureCombinePath: {ex.Message}");
                 return null;
             }
         }
