@@ -15,7 +15,6 @@ namespace TID3.Services
 {
     public class CoverArtService
     {
-        private readonly HttpClient _httpClient;
         private readonly LastFmService _lastFmService;
         private readonly SpotifyService _spotifyService;
         private readonly ITunesService _iTunesService;
@@ -25,11 +24,11 @@ namespace TID3.Services
         public CoverArtService(CoverArtSourceSettings? settings = null)
         {
             _settings = settings ?? new CoverArtSourceSettings();
-            _httpClient = HttpClientManager.CreateClientWithUserAgent("TID3 Cover Art Fetcher/1.0");
-            _lastFmService = new LastFmService(_httpClient, _settings.LastFmApiKey);
-            _spotifyService = new SpotifyService(_httpClient, _settings.SpotifyClientId, _settings.SpotifyClientSecret);
-            _iTunesService = new ITunesService(_httpClient);
-            _deezerService = new DeezerService(_httpClient);
+            var httpClient = HttpClientManager.CoverArt;
+            _lastFmService = new LastFmService(httpClient, _settings.LastFmApiKey);
+            _spotifyService = new SpotifyService(httpClient, _settings.SpotifyClientId, _settings.SpotifyClientSecret);
+            _iTunesService = new ITunesService(httpClient);
+            _deezerService = new DeezerService(httpClient);
         }
 
         public async Task<List<CoverSource>> SearchCoverArtAsync(string artist, string album)
@@ -224,7 +223,7 @@ namespace TID3.Services
         {
             try
             {
-                var response = await _httpClient.GetAsync(imageUrl);
+                var response = await HttpClientManager.CoverArt.GetAsync(imageUrl);
                 if (response.IsSuccessStatusCode)
                 {
                     using var stream = await response.Content.ReadAsStreamAsync();
@@ -247,7 +246,7 @@ namespace TID3.Services
 
         public void Dispose()
         {
-            _httpClient?.Dispose();
+            // HttpClient is now managed by HttpClientManager - no disposal needed
         }
     }
 
@@ -271,7 +270,7 @@ namespace TID3.Services
             try
             {
                 var url = $"{BASE_URL}?method=album.getinfo&api_key={_apiKey}&artist={Uri.EscapeDataString(artist)}&album={Uri.EscapeDataString(album)}&format=json";
-                var response = await _httpClient.GetStringAsync(url);
+                var response = await HttpClientManager.CoverArt.GetStringAsync(url);
                 
                 using var doc = JsonDocument.Parse(response);
                 var root = doc.RootElement;
@@ -344,10 +343,11 @@ namespace TID3.Services
                 File.AppendAllText(logPath, $"Search URL: {url}\n");
                 File.AppendAllText(logPath, $"Searching for: Artist='{artist}', Album='{album}'\n");
                 
-                _httpClient.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _accessToken);
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _accessToken);
                 
-                var response = await _httpClient.GetStringAsync(url);
+                var httpResponse = await HttpClientManager.CoverArt.SendAsync(request);
+                var response = await httpResponse.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(response);
                 
                 if (doc.RootElement.TryGetProperty("albums", out var albums) &&
@@ -456,7 +456,7 @@ namespace TID3.Services
                     new KeyValuePair<string, string>("grant_type", "client_credentials")
                 });
 
-                var tokenResponse = await _httpClient.SendAsync(tokenRequest);
+                var tokenResponse = await HttpClientManager.CoverArt.SendAsync(tokenRequest);
                 
                 if (tokenResponse.IsSuccessStatusCode)
                 {
@@ -578,7 +578,7 @@ namespace TID3.Services
                 var url = $"{BASE_URL}?term={term}&entity=album&limit=20"; // Get more results for better matching
                 
                 System.Diagnostics.Debug.WriteLine($"iTunes API call: {url}");
-                var response = await _httpClient.GetStringAsync(url);
+                var response = await HttpClientManager.CoverArt.GetStringAsync(url);
                 using var doc = JsonDocument.Parse(response);
                 
                 if (doc.RootElement.TryGetProperty("results", out var results))
@@ -679,7 +679,7 @@ namespace TID3.Services
                 var url = $"{BASE_URL}search/album?q={query}&limit=20"; // Get more results for better matching
                 
                 System.Diagnostics.Debug.WriteLine($"Deezer API call: {url}");
-                var response = await _httpClient.GetStringAsync(url);
+                var response = await HttpClientManager.CoverArt.GetStringAsync(url);
                 using var doc = JsonDocument.Parse(response);
                 
                 if (doc.RootElement.TryGetProperty("data", out var data))

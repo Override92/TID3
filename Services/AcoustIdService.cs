@@ -95,7 +95,7 @@ namespace TID3.Services
                 throw new ArgumentException("AcoustID API key is required", nameof(apiKey));
 
             _apiKey = apiKey;
-            _httpClient = HttpClientManager.Instance;
+            _httpClient = HttpClientManager.AcoustId;
         }
 
         public async Task<List<AcoustIdResult>> IdentifyByFingerprintAsync(string filePath)
@@ -436,8 +436,7 @@ namespace TID3.Services
             {
                 var url = $"https://musicbrainz.org/ws/2/recording/{recordingId}?fmt=json&inc=releases";
                 
-                var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0 (contact@example.com)");
-                var response = await client.SafeGetAsync(url, maxRetries: 2, delayMs: 500);
+                var response = await HttpClientManager.AcoustId.SafeGetAsync(url, maxRetries: 2, delayMs: 500);
                 
                 if (response == null || !response.IsSuccessStatusCode)
                     return null;

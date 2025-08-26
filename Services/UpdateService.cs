@@ -19,20 +19,17 @@ namespace TID3.Services
 
     public class UpdateService
     {
-        private readonly HttpClient _httpClient;
         private const string GITHUB_API_URL = "https://api.github.com/repos/Override92/TID3/releases/latest";
-        private const string USER_AGENT = "TID3-UpdateChecker/1.0";
 
         public UpdateService()
         {
-            _httpClient = HttpClientManager.CreateClientWithUserAgent(USER_AGENT);
         }
 
         public async Task<UpdateInfo?> CheckForUpdatesAsync()
         {
             try
             {
-                var response = await _httpClient.SafeGetAsync(GITHUB_API_URL);
+                var response = await HttpClientManager.Update.SafeGetAsync(GITHUB_API_URL);
                 
                 if (response == null || !response.IsSuccessStatusCode)
                 {
@@ -123,7 +120,7 @@ namespace TID3.Services
 
         public void Dispose()
         {
-            _httpClient?.Dispose();
+            // HttpClient is now managed by HttpClientManager - no disposal needed
         }
     }
 }

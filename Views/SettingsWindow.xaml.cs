@@ -185,7 +185,7 @@ namespace TID3.Views
                     return;
                 }
 
-                using var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0");
+                var client = HttpClientManager.General;
                 var url = $"https://api.discogs.com/database/search?q=test&key={apiKey}&secret={secret}";
 
                 var response = await client.GetAsync(url);
@@ -592,7 +592,7 @@ namespace TID3.Views
                 }
 
                 // Test with a well-known album
-                using var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0");
+                var client = HttpClientManager.General;
                 var lastFmService = new Services.LastFmService(client, apiKey);
                 
                 var coverUrl = await lastFmService.GetAlbumCoverAsync("The Beatles", "Abbey Road");
@@ -643,7 +643,7 @@ namespace TID3.Views
                 }
 
                 // Test Spotify Client Credentials flow
-                using var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0");
+                var client = HttpClientManager.General;
                 
                 // Get access token using Client Credentials flow
                 var authString = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));

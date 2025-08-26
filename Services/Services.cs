@@ -23,14 +23,12 @@ namespace TID3.Services
     }
     public class MusicBrainzService
     {
-        private HttpClient _client;
         private const string BASE_URL = "https://musicbrainz.org/ws/2/";
         private AppSettings _settings;
 
         public MusicBrainzService()
         {
             _settings = SettingsManager.LoadSettings();
-            _client = HttpClientManager.CreateClientWithUserAgent(_settings.GetUserAgent());
         }
 
         public async Task<List<MusicBrainzRelease>> SearchReleases(string query)
@@ -38,7 +36,7 @@ namespace TID3.Services
             try
             {
                 var url = $"{BASE_URL}release/?query={Uri.EscapeDataString(query)}&fmt=json&limit=10";
-                var response = await _client.GetStringAsync(url);
+                var response = await HttpClientManager.MusicBrainz.GetStringAsync(url);
                 using var document = JsonDocument.Parse(response);
                 var data = document.RootElement;
 
@@ -73,7 +71,7 @@ namespace TID3.Services
             try
             {
                 var url = $"{BASE_URL}release/{releaseId}?inc=recordings&fmt=json";
-                var response = await _client.GetStringAsync(url);
+                var response = await HttpClientManager.MusicBrainz.GetStringAsync(url);
                 using var document = JsonDocument.Parse(response);
                 var data = document.RootElement;
 
@@ -122,7 +120,7 @@ namespace TID3.Services
             try
             {
                 var url = $"https://coverartarchive.org/release/{releaseId}";
-                var response = await _client.GetStringAsync(url);
+                var response = await HttpClientManager.MusicBrainz.GetStringAsync(url);
                 using var document = JsonDocument.Parse(response);
                 var data = document.RootElement;
 
@@ -174,7 +172,7 @@ namespace TID3.Services
                 
             try
             {
-                var response = await _client.SafeGetAsync(imageUrl);
+                var response = await HttpClientManager.MusicBrainz.SafeGetAsync(imageUrl);
                 if (response?.IsSuccessStatusCode == true)
                 {
                     var imageData = await response.Content.ReadAsByteArrayAsync();
@@ -198,8 +196,7 @@ namespace TID3.Services
         public void RefreshSettings()
         {
             _settings = SettingsManager.LoadSettings();
-            _client.DefaultRequestHeaders.Clear();
-            _client.DefaultRequestHeaders.Add("User-Agent", _settings.GetUserAgent());
+            // Headers are now managed by HttpClientManager.MusicBrainz
         }
 
         private static string GetArtistFromCredit(JsonElement element)
@@ -256,14 +253,12 @@ namespace TID3.Services
 
     public class DiscogsService
     {
-        private HttpClient _client;
         private const string BASE_URL = "https://api.discogs.com/";
         private AppSettings _settings;
 
         public DiscogsService()
         {
             _settings = SettingsManager.LoadSettings();
-            _client = HttpClientManager.CreateClientWithUserAgent(_settings.GetUserAgent());
         }
 
         public async Task<List<DiscogsRelease>> SearchReleases(string query)
@@ -277,7 +272,7 @@ namespace TID3.Services
                 }
 
                 var url = $"{BASE_URL}database/search?q={Uri.EscapeDataString(query)}&type=release&key={_settings.DiscogsApiKey}&secret={_settings.DiscogsSecret}";
-                var response = await _client.GetStringAsync(url);
+                var response = await HttpClientManager.MusicBrainz.GetStringAsync(url);
                 using var document = JsonDocument.Parse(response);
                 var data = document.RootElement;
 
@@ -313,8 +308,7 @@ namespace TID3.Services
         public void RefreshSettings()
         {
             _settings = SettingsManager.LoadSettings();
-            _client.DefaultRequestHeaders.Clear();
-            _client.DefaultRequestHeaders.Add("User-Agent", _settings.GetUserAgent());
+            // Headers are now managed by HttpClientManager.MusicBrainz
         }
 
         private static string GetDiscogsArtistString(JsonElement element)

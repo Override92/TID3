@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Net;
@@ -8,21 +9,58 @@ namespace TID3.Utils
 {
     public static class HttpClientManager
     {
-        private static readonly Lazy<HttpClient> _lazyClient = new Lazy<HttpClient>(() => 
+        private static readonly ConcurrentDictionary<string, Lazy<HttpClient>> _clients = new();
+        private static readonly object _lock = new object();
+
+        public static HttpClient GetOrCreateClient(string name, Action<HttpClient>? configure = null)
         {
-            var client = new HttpClient();
-            client.Timeout = TimeSpan.FromSeconds(30);
-            return client;
+            return _clients.GetOrAdd(name, _ => new Lazy<HttpClient>(() =>
+            {
+                var client = new HttpClient();
+                client.Timeout = TimeSpan.FromSeconds(30);
+                configure?.Invoke(client);
+                return client;
+            })).Value;
+        }
+
+        public static HttpClient Default => GetOrCreateClient("default");
+
+        public static HttpClient MusicBrainz => GetOrCreateClient("musicbrainz", client =>
+        {
+            var settings = SettingsManager.LoadSettings();
+            client.DefaultRequestHeaders.Add("User-Agent", settings.GetUserAgent());
         });
 
-        public static HttpClient Instance => _lazyClient.Value;
+        public static HttpClient CoverArt => GetOrCreateClient("coverart", client =>
+        {
+            client.DefaultRequestHeaders.Add("User-Agent", "TID3 Cover Art Fetcher/1.0");
+        });
 
+        public static HttpClient Update => GetOrCreateClient("update", client =>
+        {
+            client.DefaultRequestHeaders.Add("User-Agent", "TID3/1.0");
+        });
+
+        public static HttpClient AcoustId => GetOrCreateClient("acoustid", client =>
+        {
+            client.DefaultRequestHeaders.Add("User-Agent", "TID3/1.0 (contact@example.com)");
+        });
+
+        public static HttpClient General => GetOrCreateClient("general", client =>
+        {
+            client.DefaultRequestHeaders.Add("User-Agent", "TID3/1.0");
+        });
+
+        [Obsolete("Use specific named clients like MusicBrainz, CoverArt, etc. instead")]
+        public static HttpClient Instance => Default;
+
+        [Obsolete("Use GetOrCreateClient with configuration instead")]
         public static HttpClient CreateClientWithUserAgent(string userAgent)
         {
-            var client = new HttpClient();
-            client.DefaultRequestHeaders.Add("User-Agent", userAgent);
-            client.Timeout = TimeSpan.FromSeconds(30);
-            return client;
+            return GetOrCreateClient($"legacy_{userAgent}", client =>
+            {
+                client.DefaultRequestHeaders.Add("User-Agent", userAgent);
+            });
         }
 
         public static async Task<HttpResponseMessage?> SafeGetAsync(this HttpClient client, string url, int maxRetries = 3, int delayMs = 1000)
