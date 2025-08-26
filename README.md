@@ -14,6 +14,10 @@
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/R6R41JCKWA)
 </div>
 
+## Look and Feel
+
+![Screenshot of TID3 Application](docs/images/tid3-ui.png)
+
 ## ✨ Features
 
 ### 🎯 Core Functionality
