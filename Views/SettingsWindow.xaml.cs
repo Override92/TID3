@@ -336,7 +336,7 @@ namespace TID3.Views
         {
             try
             {
-                Process.Start(new ProcessStartInfo
+                using var process = Process.Start(new ProcessStartInfo
                 {
                     FileName = e.Uri.AbsoluteUri,
                     UseShellExecute = true
@@ -431,7 +431,7 @@ namespace TID3.Views
                         {
                             try
                             {
-                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                                 {
                                     FileName = updateInfo.DownloadUrl,
                                     UseShellExecute = true
@@ -647,7 +647,7 @@ namespace TID3.Views
                 
                 // Get access token using Client Credentials flow
                 var authString = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
-                var tokenRequest = new HttpRequestMessage(HttpMethod.Post, "https://accounts.spotify.com/api/token");
+                using var tokenRequest = new HttpRequestMessage(HttpMethod.Post, "https://accounts.spotify.com/api/token");
                 tokenRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", authString);
                 tokenRequest.Content = new FormUrlEncodedContent(new[]
                 {
@@ -666,7 +666,7 @@ namespace TID3.Views
                         var accessToken = tokenElement.GetString();
                         
                         // Test search with the access token
-                        var searchRequest = new HttpRequestMessage(HttpMethod.Get, 
+                        using var searchRequest = new HttpRequestMessage(HttpMethod.Get, 
                             "https://api.spotify.com/v1/search?q=artist:The%20Beatles%20album:Abbey%20Road&type=album&limit=1");
                         searchRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
                         
