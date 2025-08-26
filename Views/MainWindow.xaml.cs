@@ -815,7 +815,7 @@ namespace TID3.Views
             }
         }
 
-        private async void SaveAll_Click(object sender, RoutedEventArgs e)
+        private void SaveAll_Click(object sender, RoutedEventArgs e)
         {
             if (!_audioFiles.Any())
             {
@@ -832,20 +832,20 @@ namespace TID3.Views
 
             try
             {
-                var (saved, coverArtsSaved) = await Task.Run(() =>
+                // Run batch save on UI thread to avoid cross-thread access issues
+                int savedCount = 0;
+                int coverArtCount = 0;
+                var replaceCoverArt = IsInBatchMode() ? BatchReplaceCoverArtCheckBox.IsChecked == true : ReplaceCoverArtCheckBox.IsChecked == true;
+                
+                foreach (var file in _audioFiles)
                 {
-                    int savedCount = 0;
-                    int coverArtCount = 0;
-                    
-                    foreach (var file in _audioFiles)
-                    {
-                        var replaceCoverArt = IsInBatchMode() ? BatchReplaceCoverArtCheckBox.IsChecked == true : ReplaceCoverArtCheckBox.IsChecked == true;
-                        var (success, coverArtSaved) = _tagService.SaveFile(file, replaceCoverArt);
-                        if (success) savedCount++;
-                        if (coverArtSaved) coverArtCount++;
-                    }
-                    return (savedCount, coverArtCount);
-                });
+                    var (success, coverArtSaved) = _tagService.SaveFile(file, replaceCoverArt);
+                    if (success) savedCount++;
+                    if (coverArtSaved) coverArtCount++;
+                }
+                
+                var saved = savedCount;
+                var coverArtsSaved = coverArtCount;
 
                 string statusMessage = $"Saved {saved} of {_audioFiles.Count} files successfully.";
                 if (coverArtsSaved > 0)
@@ -3483,6 +3483,74 @@ namespace TID3.Views
             SourceInitialized -= MainWindow_SourceInitialized;
             
             base.OnClosed(e);
+        }
+
+        #endregion
+
+        #region Auto-Check Event Handlers
+
+        private void BatchAlbumText_GotFocus(object sender, RoutedEventArgs e)
+        {
+            if (BatchAlbumCheck != null && !BatchAlbumCheck.IsChecked.GetValueOrDefault())
+            {
+                BatchAlbumCheck.IsChecked = true;
+            }
+        }
+
+        private void BatchAlbumText_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (BatchAlbumCheck != null && !BatchAlbumCheck.IsChecked.GetValueOrDefault())
+            {
+                BatchAlbumCheck.IsChecked = true;
+            }
+        }
+
+        private void BatchAlbumArtistText_GotFocus(object sender, RoutedEventArgs e)
+        {
+            if (BatchAlbumArtistCheck != null && !BatchAlbumArtistCheck.IsChecked.GetValueOrDefault())
+            {
+                BatchAlbumArtistCheck.IsChecked = true;
+            }
+        }
+
+        private void BatchAlbumArtistText_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (BatchAlbumArtistCheck != null && !BatchAlbumArtistCheck.IsChecked.GetValueOrDefault())
+            {
+                BatchAlbumArtistCheck.IsChecked = true;
+            }
+        }
+
+        private void BatchGenreText_GotFocus(object sender, RoutedEventArgs e)
+        {
+            if (BatchGenreCheck != null && !BatchGenreCheck.IsChecked.GetValueOrDefault())
+            {
+                BatchGenreCheck.IsChecked = true;
+            }
+        }
+
+        private void BatchGenreText_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (BatchGenreCheck != null && !BatchGenreCheck.IsChecked.GetValueOrDefault())
+            {
+                BatchGenreCheck.IsChecked = true;
+            }
+        }
+
+        private void BatchYearText_GotFocus(object sender, RoutedEventArgs e)
+        {
+            if (BatchYearCheck != null && !BatchYearCheck.IsChecked.GetValueOrDefault())
+            {
+                BatchYearCheck.IsChecked = true;
+            }
+        }
+
+        private void BatchYearText_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (BatchYearCheck != null && !BatchYearCheck.IsChecked.GetValueOrDefault())
+            {
+                BatchYearCheck.IsChecked = true;
+            }
         }
 
         #endregion

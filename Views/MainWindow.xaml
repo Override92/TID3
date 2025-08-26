@@ -1416,13 +1416,137 @@
                         <Setter Property="Background" Value="Transparent"/>
                         <Setter Property="BorderThickness" Value="0"/>
                         <Setter Property="Padding" Value="0"/>
-                        <Setter Property="Margin" Value="0"/>
+                        <Setter Property="Margin" Value="1"/>
                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                        <Style.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
-                            </Trigger>
-                        </Style.Triggers>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="TreeViewItem">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition/>
+                                        </Grid.RowDefinitions>
+                                        
+                                        <!-- Selection Background with Modern Design -->
+                                        <Border x:Name="SelectionBorder"
+                                                Grid.Row="0"
+                                                CornerRadius="6"
+                                                Margin="2,1"
+                                                BorderThickness="0">
+                                            <Border.Background>
+                                                <SolidColorBrush Color="Transparent"/>
+                                            </Border.Background>
+                                            <Border.Effect>
+                                                <DropShadowEffect x:Name="SelectionShadow"
+                                                                Color="#FF0078D4" 
+                                                                ShadowDepth="0" 
+                                                                BlurRadius="0" 
+                                                                Opacity="0"/>
+                                            </Border.Effect>
+                                            
+                                            <ContentPresenter x:Name="PART_Header"
+                                                            ContentSource="Header"
+                                                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                        </Border>
+                                        
+                                        <ItemsPresenter x:Name="ItemsHost"
+                                                      Grid.Row="1"
+                                                      Margin="19,0,0,0"/>
+                                    </Grid>
+                                    
+                                    <ControlTemplate.Triggers>
+                                        <!-- Hover Effect -->
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Trigger.EnterActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <ColorAnimation Storyboard.TargetName="SelectionBorder"
+                                                                      Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                                      To="#FF3F3F46"
+                                                                      Duration="0:0:0.3"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </Trigger.EnterActions>
+                                            <Trigger.ExitActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <ColorAnimation Storyboard.TargetName="SelectionBorder"
+                                                                      Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                                      Duration="0:0:0.5"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </Trigger.ExitActions>
+                                        </Trigger>
+                                        
+                                        <!-- Selection Effect -->
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Trigger.EnterActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <!-- Gradient Background Animation -->
+                                                        <ColorAnimation Storyboard.TargetName="SelectionBorder"
+                                                                      Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                                      To="#FF0078D4"
+                                                                      Duration="0:0:0.2"/>
+                                                        <!-- Glow Effect Animation -->
+                                                        <DoubleAnimation Storyboard.TargetName="SelectionShadow"
+                                                                       Storyboard.TargetProperty="BlurRadius"
+                                                                       To="8"
+                                                                       Duration="0:0:0.2"/>
+                                                        <DoubleAnimation Storyboard.TargetName="SelectionShadow"
+                                                                       Storyboard.TargetProperty="Opacity"
+                                                                       To="0.4"
+                                                                       Duration="0:0:0.2"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </Trigger.EnterActions>
+                                            <Trigger.ExitActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <ColorAnimation Storyboard.TargetName="SelectionBorder"
+                                                                      Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                                      Duration="0:0:0.2"/>
+                                                        <DoubleAnimation Storyboard.TargetName="SelectionShadow"
+                                                                       Storyboard.TargetProperty="BlurRadius"
+                                                                       To="0"
+                                                                       Duration="0:0:0.2"/>
+                                                        <DoubleAnimation Storyboard.TargetName="SelectionShadow"
+                                                                       Storyboard.TargetProperty="Opacity"
+                                                                       To="0"
+                                                                       Duration="0:0:0.2"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </Trigger.ExitActions>
+                                        </Trigger>
+                                        
+                                        <!-- Selected + Hover Effect -->
+                                        <MultiTrigger>
+                                            <MultiTrigger.Conditions>
+                                                <Condition Property="IsSelected" Value="True"/>
+                                                <Condition Property="IsMouseOver" Value="True"/>
+                                            </MultiTrigger.Conditions>
+                                            <Setter TargetName="SelectionBorder" Property="Background">
+                                                <Setter.Value>
+                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                        <GradientStop Color="#FF1E8CE6" Offset="0"/>
+                                                        <GradientStop Color="#FF0078D4" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </MultiTrigger>
+                                        
+                                        <!-- Expanded State -->
+                                        <Trigger Property="HasItems" Value="False">
+                                            <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed"/>
+                                        </Trigger>
+                                        <Trigger Property="IsExpanded" Value="False">
+                                            <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
                     </Style>
                 </TreeView.ItemContainerStyle>
             </TreeView>
@@ -1623,25 +1747,29 @@
                         <CheckBox Name="BatchAlbumCheck" Content="Update Album" Style="{StaticResource ModernCheckBox}"/>
                         <TextBox Name="BatchAlbumText" Style="{StaticResource ModernTextBox}" 
                                 Margin="0,0,12,4"
-                                IsEnabled="{Binding ElementName=BatchAlbumCheck, Path=IsChecked}"/>
+                                GotFocus="BatchAlbumText_GotFocus"
+                                TextChanged="BatchAlbumText_TextChanged"/>
 
                         <!-- Album Artist -->
                         <CheckBox Name="BatchAlbumArtistCheck" Content="Update Album Artist" Style="{StaticResource ModernCheckBox}" Margin="0,8,0,4"/>
                         <TextBox Name="BatchAlbumArtistText" Style="{StaticResource ModernTextBox}"
                                 Margin="0,0,12,4"
-                                IsEnabled="{Binding ElementName=BatchAlbumArtistCheck, Path=IsChecked}"/>
+                                GotFocus="BatchAlbumArtistText_GotFocus"
+                                TextChanged="BatchAlbumArtistText_TextChanged"/>
 
                         <!-- Genre -->
                         <CheckBox Name="BatchGenreCheck" Content="Update Genre" Style="{StaticResource ModernCheckBox}" Margin="0,8,0,4"/>
                         <TextBox Name="BatchGenreText" Style="{StaticResource ModernTextBox}"
                                 Margin="0,0,12,4"
-                                IsEnabled="{Binding ElementName=BatchGenreCheck, Path=IsChecked}"/>
+                                GotFocus="BatchGenreText_GotFocus"
+                                TextChanged="BatchGenreText_TextChanged"/>
 
                         <!-- Year -->
                         <CheckBox Name="BatchYearCheck" Content="Update Year" Style="{StaticResource ModernCheckBox}" Margin="0,8,0,4"/>
                         <TextBox Name="BatchYearText" Style="{StaticResource ModernTextBox}"
                                 Margin="0,0,12,4"
-                                IsEnabled="{Binding ElementName=BatchYearCheck, Path=IsChecked}"/>
+                                GotFocus="BatchYearText_GotFocus"
+                                TextChanged="BatchYearText_TextChanged"/>
 
                         <!-- Album Cover -->
                         <CheckBox Name="BatchAlbumCoverCheck" Content="Update Album Cover" Style="{StaticResource ModernCheckBox}" Margin="0,16,0,4"/>
