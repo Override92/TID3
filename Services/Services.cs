@@ -35,86 +35,70 @@ namespace TID3.Services
 
         public async Task<List<MusicBrainzRelease>> SearchReleases(string query)
         {
-            try
-            {
-                var url = $"{BASE_URL}release/?query={Uri.EscapeDataString(query)}&fmt=json&limit=10";
-                var response = await _client.GetStringAsync(url);
-                using var document = JsonDocument.Parse(response);
-                var data = document.RootElement;
+            var url = $"{BASE_URL}release/?query={Uri.EscapeDataString(query)}&fmt=json&limit=10";
+            var response = await _client.GetStringAsync(url);
+            using var document = JsonDocument.Parse(response);
+            var data = document.RootElement;
 
-                var releases = new List<MusicBrainzRelease>();
-                if (data.TryGetProperty("releases", out var releasesElement))
-                {
-                    foreach (var release in releasesElement.EnumerateArray())
-                    {
-                        var mbRelease = new MusicBrainzRelease
-                        {
-                            Id = release.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "",
-                            Title = release.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
-                            Artist = GetArtistFromCredit(release),
-                            Date = release.TryGetProperty("date", out var date) ? date.GetString() ?? "" : "",
-                            Score = release.TryGetProperty("score", out var score) ? score.GetInt32() : 0,
-                            TrackCount = GetMusicBrainzTrackCount(release)
-                        };
-                        releases.Add(mbRelease);
-                    }
-                }
-                return releases;
-            }
-            catch (Exception ex)
+            var releases = new List<MusicBrainzRelease>();
+            if (data.TryGetProperty("releases", out var releasesElement))
             {
-                MessageBox.Show($"MusicBrainz search error: {ex.Message}");
-                return [];
+                foreach (var release in releasesElement.EnumerateArray())
+                {
+                    var mbRelease = new MusicBrainzRelease
+                    {
+                        Id = release.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "",
+                        Title = release.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
+                        Artist = GetArtistFromCredit(release),
+                        Date = release.TryGetProperty("date", out var date) ? date.GetString() ?? "" : "",
+                        Score = release.TryGetProperty("score", out var score) ? score.GetInt32() : 0,
+                        TrackCount = GetMusicBrainzTrackCount(release)
+                    };
+                    releases.Add(mbRelease);
+                }
             }
+            return releases;
         }
 
         public async Task<MusicBrainzRelease?> GetReleaseDetails(string releaseId)
         {
-            try
+            var url = $"{BASE_URL}release/{releaseId}?inc=recordings&fmt=json";
+            var response = await _client.GetStringAsync(url);
+            using var document = JsonDocument.Parse(response);
+            var data = document.RootElement;
+
+            var release = new MusicBrainzRelease
             {
-                var url = $"{BASE_URL}release/{releaseId}?inc=recordings&fmt=json";
-                var response = await _client.GetStringAsync(url);
-                using var document = JsonDocument.Parse(response);
-                var data = document.RootElement;
+                Id = data.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "",
+                Title = data.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
+                Artist = GetArtistFromCredit(data),
+                Date = data.TryGetProperty("date", out var date) ? date.GetString() ?? "" : ""
+            };
 
-                var release = new MusicBrainzRelease
+            if (data.TryGetProperty("media", out var mediaElement))
+            {
+                foreach (var medium in mediaElement.EnumerateArray())
                 {
-                    Id = data.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "",
-                    Title = data.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
-                    Artist = GetArtistFromCredit(data),
-                    Date = data.TryGetProperty("date", out var date) ? date.GetString() ?? "" : ""
-                };
-
-                if (data.TryGetProperty("media", out var mediaElement))
-                {
-                    foreach (var medium in mediaElement.EnumerateArray())
+                    if (medium.TryGetProperty("tracks", out var tracksElement))
                     {
-                        if (medium.TryGetProperty("tracks", out var tracksElement))
+                        foreach (var track in tracksElement.EnumerateArray())
                         {
-                            foreach (var track in tracksElement.EnumerateArray())
+                            release.Tracks.Add(new MusicBrainzTrack
                             {
-                                release.Tracks.Add(new MusicBrainzTrack
-                                {
-                                    Title = track.TryGetProperty("title", out var trackTitle) ? trackTitle.GetString() ?? "" : "",
-                                    Artist = GetTrackArtist(track, release.Artist),
-                                    Position = track.TryGetProperty("position", out var pos) ? pos.GetInt32() : 0,
-                                    Length = track.TryGetProperty("length", out var len) ? len.GetInt32() : 0
-                                });
-                            }
+                                Title = track.TryGetProperty("title", out var trackTitle) ? trackTitle.GetString() ?? "" : "",
+                                Artist = GetTrackArtist(track, release.Artist),
+                                Position = track.TryGetProperty("position", out var pos) ? pos.GetInt32() : 0,
+                                Length = track.TryGetProperty("length", out var len) ? len.GetInt32() : 0
+                            });
                         }
                     }
                 }
-
-                // Update track count based on loaded tracks
-                release.TrackCount = release.Tracks.Count;
-
-                return release;
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"MusicBrainz details error: {ex.Message}");
-                return null;
-            }
+
+            // Update track count based on loaded tracks
+            release.TrackCount = release.Tracks.Count;
+
+            return release;
         }
 
         public async Task<string?> GetCoverArtUrl(string releaseId)
@@ -268,46 +252,44 @@ namespace TID3.Services
 
         public async Task<List<DiscogsRelease>> SearchReleases(string query)
         {
-            try
+            if (!_settings.HasValidDiscogsCredentials())
             {
-                if (!_settings.HasValidDiscogsCredentials())
-                {
-                    MessageBox.Show("Discogs API credentials are not configured. Please check Settings.", "API Configuration", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return [];
-                }
+                throw new InvalidOperationException("Discogs API credentials are not configured. Please check Settings.");
+            }
 
-                var url = $"{BASE_URL}database/search?q={Uri.EscapeDataString(query)}&type=release&key={_settings.DiscogsApiKey}&secret={_settings.DiscogsSecret}";
-                var response = await _client.GetStringAsync(url);
-                using var document = JsonDocument.Parse(response);
-                var data = document.RootElement;
+            var url = $"{BASE_URL}database/search?q={Uri.EscapeDataString(query)}&type=release";
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.TryAddWithoutValidation(
+                "Authorization",
+                $"Discogs key={_settings.DiscogsApiKey}, secret={_settings.DiscogsSecret}");
 
-                var releases = new List<DiscogsRelease>();
-                if (data.TryGetProperty("results", out var resultsElement))
+            using var response = await _client.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            var body = await response.Content.ReadAsStringAsync();
+            using var document = JsonDocument.Parse(body);
+            var data = document.RootElement;
+
+            var releases = new List<DiscogsRelease>();
+            if (data.TryGetProperty("results", out var resultsElement))
+            {
+                foreach (var result in resultsElement.EnumerateArray())
                 {
-                    foreach (var result in resultsElement.EnumerateArray())
+                    var titleString = result.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "";
+                    var albumTitle = ExtractAlbumFromDiscogsTitle(titleString);
+
+                    releases.Add(new DiscogsRelease
                     {
-                        var titleString = result.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "";
-                        var albumTitle = ExtractAlbumFromDiscogsTitle(titleString);
-                        
-                        releases.Add(new DiscogsRelease
-                        {
-                            Id = result.TryGetProperty("id", out var id) ? id.GetInt32() : 0,
-                            Title = albumTitle,
-                            Artist = GetDiscogsArtistString(result),
-                            Year = GetDiscogsYearString(result),
-                            Genre = GetDiscogsGenreString(result),
-                            TrackCount = GetDiscogsTrackCount(result),
-                            CoverArtUrl = GetDiscogsCoverArtUrl(result)
-                        });
-                    }
+                        Id = result.TryGetProperty("id", out var id) ? id.GetInt32() : 0,
+                        Title = albumTitle,
+                        Artist = GetDiscogsArtistString(result),
+                        Year = GetDiscogsYearString(result),
+                        Genre = GetDiscogsGenreString(result),
+                        TrackCount = GetDiscogsTrackCount(result),
+                        CoverArtUrl = GetDiscogsCoverArtUrl(result)
+                    });
                 }
-                return releases;
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Discogs search error: {ex.Message}");
-                return [];
-            }
+            return releases;
         }
 
         public void RefreshSettings()
@@ -609,7 +591,7 @@ namespace TID3.Services
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error saving file {audioFile.FilePath}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Error saving file {audioFile.FilePath}: {ex.Message}");
                 return (false, false);
             }
         }

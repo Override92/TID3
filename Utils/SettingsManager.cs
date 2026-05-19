@@ -176,58 +176,70 @@ namespace TID3.Utils
 
         private static readonly string SettingsFilePath = Path.Combine(SettingsDirectory, "settings.json");
 
+        private static readonly object _gate = new();
+        private static AppSettings? _cached;
+
         public static AppSettings LoadSettings()
         {
-            try
+            lock (_gate)
             {
-                if (!File.Exists(SettingsFilePath))
+                if (_cached != null) return _cached;
+
+                try
                 {
-                    // Create default settings file
-                    var defaultSettings = new AppSettings();
-                    SaveSettings(defaultSettings);
-                    return defaultSettings;
-                }
+                    if (!File.Exists(SettingsFilePath))
+                    {
+                        var defaults = new AppSettings();
+                        SaveSettingsLocked(defaults);
+                        _cached = defaults;
+                        return _cached;
+                    }
 
-                var json = File.ReadAllText(SettingsFilePath);
-                var settings = JsonSerializer.Deserialize<AppSettings>(json);
-
-                // Validate and fix settings if necessary
-                if (settings != null)
+                    var json = File.ReadAllText(SettingsFilePath);
+                    var settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
                     ValidateSettings(settings);
-
-                return settings ?? new AppSettings();
-            }
-            catch (Exception ex)
-            {
-                System.Windows.MessageBox.Show(
-                    $"Error loading settings: {ex.Message}\nUsing default settings.",
-                    "Settings Load Error",
-                    System.Windows.MessageBoxButton.OK,
-                    System.Windows.MessageBoxImage.Warning);
-
-                return new AppSettings();
+                    _cached = settings;
+                    return _cached;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error loading settings: {ex.Message}. Using defaults.");
+                    _cached = new AppSettings();
+                    return _cached;
+                }
             }
         }
 
         public static void SaveSettings(AppSettings settings)
         {
+            lock (_gate)
+            {
+                SaveSettingsLocked(settings);
+                _cached = settings;
+            }
+        }
+
+        // Force the next LoadSettings() to re-read from disk. Call after external edits.
+        public static void InvalidateCache()
+        {
+            lock (_gate) { _cached = null; }
+        }
+
+        private static void SaveSettingsLocked(AppSettings settings)
+        {
             try
             {
-                // Ensure directory exists
                 if (!Directory.Exists(SettingsDirectory))
                 {
                     Directory.CreateDirectory(SettingsDirectory);
                 }
 
-                // Validate settings before saving
                 ValidateSettings(settings);
 
-                // Serialize settings to JSON
                 var options = new JsonSerializerOptions { WriteIndented = true };
                 var json = JsonSerializer.Serialize(settings, options);
                 File.WriteAllText(SettingsFilePath, json);
 
-                // Ensure cache directory exists
                 if (!Directory.Exists(settings.CacheDirectory))
                 {
                     Directory.CreateDirectory(settings.CacheDirectory);
@@ -235,11 +247,7 @@ namespace TID3.Utils
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show(
-                    $"Error saving settings: {ex.Message}",
-                    "Settings Save Error",
-                    System.Windows.MessageBoxButton.OK,
-                    System.Windows.MessageBoxImage.Error);
+                System.Diagnostics.Debug.WriteLine($"Error saving settings: {ex.Message}");
             }
         }
 

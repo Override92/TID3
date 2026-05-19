@@ -186,9 +186,14 @@ namespace TID3.Views
                 }
 
                 using var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0");
-                var url = $"https://api.discogs.com/database/search?q=test&key={apiKey}&secret={secret}";
+                var url = "https://api.discogs.com/database/search?q=test";
 
-                var response = await client.GetAsync(url);
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.TryAddWithoutValidation(
+                    "Authorization",
+                    $"Discogs key={apiKey}, secret={secret}");
+
+                var response = await client.SendAsync(request);
 
                 if (response.IsSuccessStatusCode)
                 {

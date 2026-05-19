@@ -59,6 +59,7 @@ namespace TID3.Utils
         {
             return ex switch
             {
+                InvalidOperationException => ex.Message,
                 HttpRequestException httpEx when httpEx.Message.Contains("Name or service not known") => "No internet connection available. Please check your network connection.",
                 HttpRequestException httpEx when httpEx.Message.Contains("timeout") => "Request timed out. The service may be temporarily unavailable.",
                 HttpRequestException httpEx when httpEx.Message.Contains("SSL") => "Secure connection failed. Please check your internet security settings.",
