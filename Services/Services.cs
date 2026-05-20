@@ -34,7 +34,7 @@ namespace TID3.Services
         public async Task<List<MusicBrainzRelease>> SearchReleases(string query)
         {
             var url = $"{BASE_URL}release/?query={Uri.EscapeDataString(query)}&fmt=json&limit=10";
-            var response = await _client.GetStringAsync(url);
+            var response = await HttpClientManager.MusicBrainz.GetStringAsync(url);
             using var document = JsonDocument.Parse(response);
             var data = document.RootElement;
 
@@ -61,7 +61,7 @@ namespace TID3.Services
         public async Task<MusicBrainzRelease?> GetReleaseDetails(string releaseId)
         {
             var url = $"{BASE_URL}release/{releaseId}?inc=recordings&fmt=json";
-            var response = await _client.GetStringAsync(url);
+            var response = await HttpClientManager.MusicBrainz.GetStringAsync(url);
             using var document = JsonDocument.Parse(response);
             var data = document.RootElement;
 
@@ -246,7 +246,7 @@ namespace TID3.Services
                 "Authorization",
                 $"Discogs key={_settings.DiscogsApiKey}, secret={_settings.DiscogsSecret}");
 
-            using var response = await _client.SendAsync(request);
+            using var response = await HttpClientManager.Discogs.SendAsync(request);
             response.EnsureSuccessStatusCode();
             var body = await response.Content.ReadAsStringAsync();
             using var document = JsonDocument.Parse(body);

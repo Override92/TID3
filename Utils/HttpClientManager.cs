@@ -37,6 +37,12 @@ namespace TID3.Utils
             client.DefaultRequestHeaders.Add("User-Agent", "TID3 Cover Art Fetcher/1.0");
         });
 
+        public static HttpClient Discogs => GetOrCreateClient("discogs", client =>
+        {
+            var settings = SettingsManager.LoadSettings();
+            client.DefaultRequestHeaders.Add("User-Agent", settings.GetUserAgent());
+        });
+
         public static HttpClient Update => GetOrCreateClient("update", client =>
         {
             client.DefaultRequestHeaders.Add("User-Agent", "TID3/1.0");
