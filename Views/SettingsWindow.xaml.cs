@@ -185,7 +185,7 @@ namespace TID3.Views
                     return;
                 }
 
-                using var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0");
+                var client = HttpClientManager.General;
                 var url = "https://api.discogs.com/database/search?q=test";
 
                 using var request = new HttpRequestMessage(HttpMethod.Get, url);

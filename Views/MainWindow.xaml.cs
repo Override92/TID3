@@ -106,6 +106,7 @@ namespace TID3.Views
         private readonly UpdateService _updateService;
         private readonly OnlineSourceCacheManager _cacheManager;
         private readonly CoverArtService _coverArtService;
+        private readonly MatchScoringService _matchScorer = new();
         private readonly ObservableCollection<AudioFileInfo> _audioFiles;
         private readonly ObservableCollection<OnlineSourceItem> _onlineSourceItems;
         private readonly ObservableCollection<AlbumGroup> _hierarchicalItems;
@@ -2308,7 +2309,7 @@ namespace TID3.Views
                                 var scoredResults = results.Take(5)
                                     .Select(release => new { 
                                         Release = release, 
-                                        Score = CalculateMatchScore(file, release),
+                                        Score = _matchScorer.CalculateMatchScore(file, release, _audioFiles.Count),
                                         File = file
                                     })
                                     .OrderByDescending(x => x.Score)
@@ -2575,7 +2576,7 @@ namespace TID3.Views
                                 var scoredResults = results.Take(5)
                                     .Select(release => new { 
                                         Release = release, 
-                                        Score = CalculateMatchScore(file, release),
+                                        Score = _matchScorer.CalculateMatchScore(file, release, _audioFiles.Count),
                                         File = file
                                     })
                                     .OrderByDescending(x => x.Score)
@@ -2694,7 +2695,7 @@ namespace TID3.Views
         {
             foreach (var file in _audioFiles)
             {
-                var score = CalculateMatchScore(file, release) * 100;
+                var score = _matchScorer.CalculateMatchScore(file, release, _audioFiles.Count) * 100;
                 file.MatchScore = score > 0 ? $"{score:F0}%" : "";
             }
         }
@@ -2703,7 +2704,7 @@ namespace TID3.Views
         {
             foreach (var file in _audioFiles)
             {
-                var score = CalculateMatchScore(file, release) * 100;
+                var score = _matchScorer.CalculateMatchScore(file, release, _audioFiles.Count) * 100;
                 file.MatchScore = score > 0 ? $"{score:F0}%" : "";
             }
         }
@@ -2808,11 +2809,11 @@ namespace TID3.Views
 
                 if (item.SourceType == "MusicBrainz" && item.Source is MusicBrainzRelease mbRelease)
                 {
-                    score = CalculateMatchScore(SelectedFile, mbRelease);
+                    score = _matchScorer.CalculateMatchScore(SelectedFile, mbRelease, _audioFiles.Count);
                 }
                 else if (item.SourceType == "Discogs" && item.Source is DiscogsRelease discogsRelease)
                 {
-                    score = CalculateMatchScore(SelectedFile, discogsRelease);
+                    score = _matchScorer.CalculateMatchScore(SelectedFile, discogsRelease, _audioFiles.Count);
                 }
 
                 if (score > bestScore)
@@ -2859,221 +2860,7 @@ namespace TID3.Views
             }
         }
 
-        private double CalculateMatchScore(AudioFileInfo? file, MusicBrainzRelease release)
-        {
-            if (file == null) return 0.0;
-
-            double score = 0.0;
-            double maxScore = 0.0;
-
-            // Artist match (most important - 35% weight)
-            maxScore += 0.35;
-            if (!string.IsNullOrEmpty(file.Artist) && !string.IsNullOrEmpty(release.Artist))
-            {
-                score += 0.35 * CalculateStringSimilarity(file.Artist, release.Artist);
-            }
-
-            // Album/Title match (30% weight)
-            maxScore += 0.30;
-            if (!string.IsNullOrEmpty(file.Album) && !string.IsNullOrEmpty(release.Title))
-            {
-                score += 0.30 * CalculateStringSimilarity(file.Album, release.Title);
-            }
-
-            // Track count match (20% weight)
-            maxScore += 0.20;
-            if (release.TrackCount > 0)
-            {
-                var loadedTrackCount = _audioFiles.Count;
-                if (loadedTrackCount > 0)
-                {
-                    // Perfect match gets full score, with decreasing score for differences
-                    var trackCountDiff = Math.Abs(release.TrackCount - loadedTrackCount);
-                    if (trackCountDiff == 0)
-                    {
-                        score += 0.20; // Perfect match
-                    }
-                    else if (trackCountDiff <= 2)
-                    {
-                        score += 0.20 * (1.0 - trackCountDiff / 3.0); // Partial credit for close matches
-                    }
-                    else if (trackCountDiff <= 5)
-                    {
-                        score += 0.20 * 0.3; // Small credit for reasonably close matches
-                    }
-                }
-            }
-
-            // Year match (10% weight)
-            maxScore += 0.10;
-            if (file.Year > 0 && !string.IsNullOrEmpty(release.Date))
-            {
-                if (ExtractYearFromDate(release.Date) == file.Year)
-                {
-                    score += 0.10;
-                }
-                else
-                {
-                    // Partial credit for close years
-                    var yearDiff = Math.Abs((int)ExtractYearFromDate(release.Date) - (int)file.Year);
-                    if (yearDiff <= 2) score += 0.10 * (1.0 - yearDiff / 3.0);
-                }
-            }
-
-            // Title match (5% weight) - for when album is missing
-            maxScore += 0.05;
-            if (!string.IsNullOrEmpty(file.Title) && !string.IsNullOrEmpty(release.Title))
-            {
-                score += 0.05 * CalculateStringSimilarity(file.Title, release.Title);
-            }
-
-            return maxScore > 0 ? score / maxScore : 0.0;
-        }
-
-        private double CalculateMatchScore(AudioFileInfo? file, DiscogsRelease release)
-        {
-            if (file == null) return 0.0;
-
-            double score = 0.0;
-            double maxScore = 0.0;
-
-            // Artist match (most important - 35% weight)
-            maxScore += 0.35;
-            if (!string.IsNullOrEmpty(file.Artist) && !string.IsNullOrEmpty(release.Artist))
-            {
-                score += 0.35 * CalculateStringSimilarity(file.Artist, release.Artist);
-            }
-
-            // Album/Title match (30% weight)
-            maxScore += 0.30;
-            if (!string.IsNullOrEmpty(file.Album) && !string.IsNullOrEmpty(release.Title))
-            {
-                score += 0.30 * CalculateStringSimilarity(file.Album, release.Title);
-            }
-
-            // Track count match (20% weight)
-            maxScore += 0.20;
-            if (release.TrackCount > 0)
-            {
-                var loadedTrackCount = _audioFiles.Count;
-                if (loadedTrackCount > 0)
-                {
-                    // Perfect match gets full score, with decreasing score for differences
-                    var trackCountDiff = Math.Abs(release.TrackCount - loadedTrackCount);
-                    if (trackCountDiff == 0)
-                    {
-                        score += 0.20; // Perfect match
-                    }
-                    else if (trackCountDiff <= 2)
-                    {
-                        score += 0.20 * (1.0 - trackCountDiff / 3.0); // Partial credit for close matches
-                    }
-                    else if (trackCountDiff <= 5)
-                    {
-                        score += 0.20 * 0.3; // Small credit for reasonably close matches
-                    }
-                }
-            }
-
-            // Year match (10% weight)
-            maxScore += 0.10;
-            if (file.Year > 0 && !string.IsNullOrEmpty(release.Year))
-            {
-                if (uint.TryParse(release.Year, out uint releaseYear) && releaseYear == file.Year)
-                {
-                    score += 0.10;
-                }
-                else if (uint.TryParse(release.Year, out releaseYear))
-                {
-                    // Partial credit for close years
-                    var yearDiff = Math.Abs((int)releaseYear - (int)file.Year);
-                    if (yearDiff <= 2) score += 0.10 * (1.0 - yearDiff / 3.0);
-                }
-            }
-
-            // Title match (5% weight) - for when album is missing
-            maxScore += 0.05;
-            if (!string.IsNullOrEmpty(file.Title) && !string.IsNullOrEmpty(release.Title))
-            {
-                score += 0.05 * CalculateStringSimilarity(file.Title, release.Title);
-            }
-
-            return maxScore > 0 ? score / maxScore : 0.0;
-        }
-
-        private static double CalculateStringSimilarity(string str1, string str2)
-        {
-            if (string.IsNullOrEmpty(str1) || string.IsNullOrEmpty(str2))
-                return 0.0;
-
-            // Normalize strings for comparison
-            str1 = NormalizeForComparison(str1);
-            str2 = NormalizeForComparison(str2);
-
-            // Exact match
-            if (str1.Equals(str2, StringComparison.OrdinalIgnoreCase))
-                return 1.0;
-
-            // Contains match
-            if (str1.Contains(str2, StringComparison.OrdinalIgnoreCase) || 
-                str2.Contains(str1, StringComparison.OrdinalIgnoreCase))
-                return 0.8;
-
-            // Calculate Levenshtein distance similarity
-            var distance = CalculateLevenshteinDistance(str1, str2);
-            var maxLength = Math.Max(str1.Length, str2.Length);
-            
-            if (maxLength == 0) return 1.0;
-            
-            var similarity = 1.0 - (double)distance / maxLength;
-            return Math.Max(0.0, similarity);
-        }
-
-        private static string NormalizeForComparison(string input)
-        {
-            return input.ToLowerInvariant()
-                       .Replace("&", "and")
-                       .Replace("'", "")
-                       .Replace("-", " ")
-                       .Replace("  ", " ")
-                       .Trim();
-        }
-
-        private static int CalculateLevenshteinDistance(string str1, string str2)
-        {
-            var len1 = str1.Length;
-            var len2 = str2.Length;
-            var matrix = new int[len1 + 1, len2 + 1];
-
-            for (int i = 0; i <= len1; i++)
-                matrix[i, 0] = i;
-
-            for (int j = 0; j <= len2; j++)
-                matrix[0, j] = j;
-
-            for (int i = 1; i <= len1; i++)
-            {
-                for (int j = 1; j <= len2; j++)
-                {
-                    var cost = str1[i - 1] == str2[j - 1] ? 0 : 1;
-                    matrix[i, j] = Math.Min(
-                        Math.Min(matrix[i - 1, j] + 1, matrix[i, j - 1] + 1),
-                        matrix[i - 1, j - 1] + cost
-                    );
-                }
-            }
-
-            return matrix[len1, len2];
-        }
-
-        private static uint ExtractYearFromDate(string? dateString)
-        {
-            if (string.IsNullOrWhiteSpace(dateString) || dateString.Length < 4)
-                return 0;
-
-            var yearString = dateString.Length >= 4 ? dateString.Substring(0, 4) : dateString;
-            return uint.TryParse(yearString, out uint year) ? year : 0;
-        }
+        // Match-scoring logic moved to TID3.Services.MatchScoringService (see _matchScorer).
 
         #endregion
 

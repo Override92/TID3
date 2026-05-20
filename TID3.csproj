@@ -28,6 +28,8 @@
     <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
     <Nullable>enable</Nullable>
     <StartupObject />
+    <!-- The TID3.Tests project lives in a subfolder; keep its sources out of this project's globs. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);TID3.Tests\**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
