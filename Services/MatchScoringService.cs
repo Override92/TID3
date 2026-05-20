@@ -1,5 +1,7 @@
 // MatchScoringService.cs - Pure scoring logic for ranking online release matches.
 using System;
+using System.Globalization;
+using System.Text;
 using TID3.Models;
 
 namespace TID3.Services
@@ -159,17 +161,36 @@ namespace TID3.Services
         }
 
         /// <summary>
-        /// Lower-cases and strips punctuation/accents-style noise so two titles can be
-        /// compared on their essential characters.
+        /// Lower-cases, folds diacritics, and strips punctuation noise so two titles
+        /// can be compared on their essential characters (e.g. "Sigur Rós" == "Sigur Ros").
         /// </summary>
         public string NormalizeForComparison(string input)
         {
-            return input.ToLowerInvariant()
+            return RemoveDiacritics(input)
+                       .ToLowerInvariant()
                        .Replace("&", "and")
                        .Replace("'", "")
                        .Replace("-", " ")
                        .Replace("  ", " ")
                        .Trim();
+        }
+
+        /// <summary>
+        /// Removes combining diacritical marks (é -> e, ö -> o, ñ -> n, …) by
+        /// decomposing to Unicode form D, dropping non-spacing marks, and recomposing.
+        /// </summary>
+        private static string RemoveDiacritics(string text)
+        {
+            var decomposed = text.Normalize(NormalizationForm.FormD);
+            var builder = new StringBuilder(decomposed.Length);
+
+            foreach (var ch in decomposed)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
+                    builder.Append(ch);
+            }
+
+            return builder.ToString().Normalize(NormalizationForm.FormC);
         }
 
         /// <summary>
