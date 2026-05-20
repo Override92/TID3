@@ -31,58 +31,73 @@ namespace TID3.Utils
 
     public static class TID3Logger
     {
-        private static readonly string LogDirectory = null!;
-        private static readonly string CurrentLogFile = null!;
+        private static string? _logDirectory;
+        private static string? _currentLogFile;
         private static readonly object LogLock = new object();
         private static LogLevel _minimumLevel = LogLevel.Info;
-        private static readonly JsonSerializerOptions JsonOptions = null!;
-
-        static TID3Logger()
+        private static volatile bool _enabled;
+        private static readonly JsonSerializerOptions JsonOptions = new()
         {
-            // Create logs directory in AppData\Local\TID3\Logs
-            var appDataLocal = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            LogDirectory = Path.Combine(appDataLocal, "TID3", "Logs");
-            
-            try
+            WriteIndented = false,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+
+        /// <summary>
+        /// Configures the logger. Call once at application startup after settings are loaded.
+        /// When <paramref name="enabled"/> is false no log directory or files are created and
+        /// every log call becomes a no-op. Safe to call again to toggle logging at runtime.
+        /// </summary>
+        public static void Initialize(bool enabled, LogLevel minimumLevel = LogLevel.Info)
+        {
+            lock (LogLock)
             {
-                Directory.CreateDirectory(LogDirectory);
-                
-                // Create current log file with timestamp
-                var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-                CurrentLogFile = Path.Combine(LogDirectory, $"TID3_{timestamp}.log");
-                
-                // Clean up old log files (keep last 10)
-                CleanupOldLogFiles();
-                
-                JsonOptions = new JsonSerializerOptions
+                _minimumLevel = minimumLevel;
+
+                if (!enabled)
                 {
-                    WriteIndented = false,
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                };
-                
-                // Write session header
-                WriteLogEntry(new LogEntry
+                    _enabled = false;
+                    return;
+                }
+
+                if (_currentLogFile == null)
                 {
-                    Timestamp = DateTime.Now,
-                    Level = LogLevel.Info,
-                    Category = "System",
-                    Component = "Logger",
-                    Message = "TID3 Application Started",
-                    ThreadId = Thread.CurrentThread.ManagedThreadId,
-                    Properties = new Dictionary<string, object>
+                    try
                     {
-                        ["Version"] = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "Unknown",
-                        ["LogFile"] = CurrentLogFile,
-                        ["Framework"] = Environment.Version.ToString(),
-                        ["OS"] = Environment.OSVersion.ToString()
+                        // Create logs directory in AppData\Local\TID3\Logs
+                        var appDataLocal = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                        _logDirectory = Path.Combine(appDataLocal, "TID3", "Logs");
+                        Directory.CreateDirectory(_logDirectory);
+
+                        // Create current log file with timestamp
+                        var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                        _currentLogFile = Path.Combine(_logDirectory, $"TID3_{timestamp}.log");
+
+                        // Clean up old log files (keep last 10)
+                        CleanupOldLogFiles();
                     }
-                });
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Failed to initialize TID3Logger: {ex.Message}");
+                        _enabled = false;
+                        return;
+                    }
+                }
+
+                _enabled = true;
             }
-            catch (Exception ex)
+
+            // Write session header (Log re-acquires the lock internally)
+            Info("System", "TID3 Application Started", new Dictionary<string, object>
             {
-                System.Diagnostics.Debug.WriteLine($"Failed to initialize TID3Logger: {ex.Message}");
-            }
+                ["Version"] = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "Unknown",
+                ["LogFile"] = _currentLogFile!,
+                ["Framework"] = Environment.Version.ToString(),
+                ["OS"] = Environment.OSVersion.ToString(),
+                ["MinimumLevel"] = minimumLevel.ToString()
+            }, "Logger");
         }
+
+        public static bool IsEnabled => _enabled;
 
         public static void SetMinimumLevel(LogLevel level)
         {
@@ -110,7 +125,7 @@ namespace TID3.Utils
 
         private static void Log(LogLevel level, string category, string message, object? properties, string component, Exception? exception = null)
         {
-            if (level < _minimumLevel)
+            if (!_enabled || level < _minimumLevel)
                 return;
 
             var logEntry = new LogEntry
@@ -168,12 +183,16 @@ namespace TID3.Utils
 
         private static void WriteLogEntry(LogEntry entry)
         {
+            var file = _currentLogFile;
+            if (file == null)
+                return;
+
             try
             {
                 lock (LogLock)
                 {
                     var jsonLine = JsonSerializer.Serialize(entry, JsonOptions);
-                    File.AppendAllText(CurrentLogFile, jsonLine + Environment.NewLine);
+                    File.AppendAllText(file, jsonLine + Environment.NewLine);
                 }
             }
             catch (Exception)
@@ -184,9 +203,12 @@ namespace TID3.Utils
 
         private static void CleanupOldLogFiles()
         {
+            if (_logDirectory == null)
+                return;
+
             try
             {
-                var logFiles = Directory.GetFiles(LogDirectory, "TID3_*.log");
+                var logFiles = Directory.GetFiles(_logDirectory, "TID3_*.log");
                 if (logFiles.Length <= 10) return;
 
                 // Sort by creation time and delete oldest files
@@ -203,8 +225,8 @@ namespace TID3.Utils
             }
         }
 
-        public static string GetLogDirectory() => LogDirectory;
-        public static string GetCurrentLogFile() => CurrentLogFile;
+        public static string? GetLogDirectory() => _logDirectory;
+        public static string? GetCurrentLogFile() => _currentLogFile;
 
         // Performance logging helpers
         public static IDisposable BeginScope(string category, string operation, object? properties = null, string component = "")

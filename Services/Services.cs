@@ -586,7 +586,8 @@ namespace TID3.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error saving file {audioFile.FilePath}: {ex.Message}");
+                TID3Logger.Error("Tags", "Error saving file", ex,
+                    new { audioFile.FilePath }, "TagService");
                 return (false, false);
             }
         }

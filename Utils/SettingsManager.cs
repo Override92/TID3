@@ -203,7 +203,8 @@ namespace TID3.Utils
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Error loading settings: {ex.Message}. Using defaults.");
+                    TID3Logger.Error("System", "Error loading settings, using defaults", ex,
+                        component: "SettingsManager");
                     _cached = new AppSettings();
                     return _cached;
                 }
@@ -247,7 +248,8 @@ namespace TID3.Utils
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error saving settings: {ex.Message}");
+                TID3Logger.Error("System", "Error saving settings", ex,
+                    component: "SettingsManager");
             }
         }
 
