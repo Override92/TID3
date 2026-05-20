@@ -107,6 +107,7 @@ namespace TID3.Views
         private readonly OnlineSourceCacheManager _cacheManager;
         private readonly CoverArtService _coverArtService;
         private readonly MatchScoringService _matchScorer = new();
+        private readonly BatchEditService _batchEditService = new();
         private readonly ObservableCollection<AudioFileInfo> _audioFiles;
         private readonly ObservableCollection<OnlineSourceItem> _onlineSourceItems;
         private readonly ObservableCollection<AlbumGroup> _hierarchicalItems;
@@ -1458,14 +1459,14 @@ namespace TID3.Views
             }
 
             var changes = GetBatchChanges();
-            if (!changes.Any())
+            if (!changes.HasAny)
             {
                 MessageBox.Show("Please select at least one field to update.", "No Changes", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             // Skip confirmation dialog if only updating album cover
-            var onlyUpdatingCover = changes.Count == 1 && changes.ContainsKey("UpdateAlbumCover");
+            var onlyUpdatingCover = changes.OnlyUpdatesAlbumCover;
             var result = MessageBoxResult.Yes; // Default to Yes
             
             if (!onlyUpdatingCover)
@@ -1502,83 +1503,53 @@ namespace TID3.Views
             }
         }
 
-        private Dictionary<string, object> GetBatchChanges()
+        private BatchEditChanges GetBatchChanges()
         {
-            var changes = new Dictionary<string, object>();
+            var changes = new BatchEditChanges();
 
             if (BatchAlbumCheck.IsChecked == true && !string.IsNullOrWhiteSpace(BatchAlbumText.Text))
-                changes["Album"] = BatchAlbumText.Text.Trim();
+                changes.Album = BatchAlbumText.Text.Trim();
 
             if (BatchAlbumArtistCheck.IsChecked == true && !string.IsNullOrWhiteSpace(BatchAlbumArtistText.Text))
-                changes["AlbumArtist"] = BatchAlbumArtistText.Text.Trim();
+                changes.AlbumArtist = BatchAlbumArtistText.Text.Trim();
 
             if (BatchGenreCheck.IsChecked == true && !string.IsNullOrWhiteSpace(BatchGenreText.Text))
-                changes["Genre"] = BatchGenreText.Text.Trim();
+                changes.Genre = BatchGenreText.Text.Trim();
 
-            if (BatchYearCheck.IsChecked == true && !string.IsNullOrWhiteSpace(BatchYearText.Text))
-            {
-                if (uint.TryParse(BatchYearText.Text.Trim(), out uint year))
-                    changes["Year"] = year;
-            }
+            if (BatchYearCheck.IsChecked == true && !string.IsNullOrWhiteSpace(BatchYearText.Text)
+                && uint.TryParse(BatchYearText.Text.Trim(), out uint year))
+                changes.Year = year;
 
             if (BatchAutoNumberCheck.IsChecked == true)
-                changes["AutoNumberTracks"] = true;
+                changes.AutoNumberTracks = true;
 
             if (BatchCleanupCheck.IsChecked == true)
-                changes["CleanupTags"] = true;
+                changes.CleanupTags = true;
 
             if (BatchAlbumCoverCheck.IsChecked == true)
-                changes["UpdateAlbumCover"] = true;
+                changes.UpdateAlbumCover = true;
 
             return changes;
         }
 
-        private void ApplyBatchChanges(List<AudioFileInfo> files, Dictionary<string, object> changes)
+        private void ApplyBatchChanges(List<AudioFileInfo> files, BatchEditChanges changes)
         {
-            // Check if we should save cover art once per album
-            var saveCoverArt = changes.ContainsKey("UpdateAlbumCover");
+            // Apply the in-memory tag-field changes (auto-numbering, cleanup, etc.)
+            _batchEditService.ApplyFieldChanges(files, changes);
+
+            // Then save each file, persisting album cover art once per unique album.
             var replaceCoverArt = IsInBatchMode() ? BatchReplaceCoverArtCheckBox.IsChecked == true : ReplaceCoverArtCheckBox.IsChecked == true;
             var albumsCoverSaved = new HashSet<string>(); // Track which albums have had cover art saved
 
-            for (int i = 0; i < files.Count; i++)
+            foreach (var file in files)
             {
-                var file = files[i];
-
-                // Apply basic field changes
-                if (changes.ContainsKey("Album"))
-                    file.Album = changes["Album"]?.ToString() ?? "";
-
-                if (changes.ContainsKey("AlbumArtist"))
-                    file.AlbumArtist = changes["AlbumArtist"]?.ToString() ?? "";
-
-                if (changes.ContainsKey("Genre"))
-                    file.Genre = changes["Genre"]?.ToString() ?? "";
-
-                if (changes.ContainsKey("Year"))
-                    file.Year = (uint)changes["Year"];
-
-                // Auto-number tracks
-                if (changes.ContainsKey("AutoNumberTracks"))
-                    file.Track = (uint)(i + 1);
-
-                // Cleanup empty tags
-                if (changes.ContainsKey("CleanupTags"))
-                {
-                    if (string.IsNullOrWhiteSpace(file.Title)) file.Title = "";
-                    if (string.IsNullOrWhiteSpace(file.Artist)) file.Artist = "";
-                    if (string.IsNullOrWhiteSpace(file.Album)) file.Album = "";
-                    if (string.IsNullOrWhiteSpace(file.Genre)) file.Genre = "";
-                    if (string.IsNullOrWhiteSpace(file.AlbumArtist)) file.AlbumArtist = "";
-                    if (string.IsNullOrWhiteSpace(file.Comment)) file.Comment = "";
-                }
-
                 // Determine if we should save cover art for this file
                 bool saveCoverForThisFile = false;
-                if (saveCoverArt && file.AlbumCover != null)
+                if (changes.UpdateAlbumCover && file.AlbumCover != null)
                 {
                     // Create a unique album identifier
                     var albumKey = $"{file.Artist?.Trim()}|{file.Album?.Trim()}";
-                    
+
                     // Only save cover art once per unique album
                     if (!string.IsNullOrEmpty(albumKey) && !albumsCoverSaved.Contains(albumKey))
                     {
@@ -1588,7 +1559,7 @@ namespace TID3.Views
                 }
 
                 // Save the file (with or without cover art)
-                var (success, coverArtSaved) = _tagService.SaveFile(file, replaceCoverArt && saveCoverForThisFile);
+                var (_, coverArtSaved) = _tagService.SaveFile(file, replaceCoverArt && saveCoverForThisFile);
                 if (coverArtSaved)
                 {
                     TID3Logger.Info("Images", "Cover art saved to album folder", new { Album = file.Album, Artist = file.Artist }, "MainWindow");
