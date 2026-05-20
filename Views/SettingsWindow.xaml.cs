@@ -597,7 +597,7 @@ namespace TID3.Views
                 }
 
                 // Test with a well-known album
-                using var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0");
+                var client = HttpClientManager.General;
                 var lastFmService = new Services.LastFmService(client, apiKey);
                 
                 var coverUrl = await lastFmService.GetAlbumCoverAsync("The Beatles", "Abbey Road");
@@ -617,7 +617,7 @@ namespace TID3.Views
             {
                 LastFmTestStatus.Text = $"✗ Error: {ex.Message}";
                 LastFmTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(220, 53, 69)); // Red
-                System.Diagnostics.Debug.WriteLine($"Last.fm test error: {ex}");
+                TID3Logger.Warning("HTTP", "Last.fm test error", ex, component: "SettingsWindow");
             }
             finally
             {
@@ -648,7 +648,7 @@ namespace TID3.Views
                 }
 
                 // Test Spotify Client Credentials flow
-                using var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0");
+                var client = HttpClientManager.General;
                 
                 // Get access token using Client Credentials flow
                 var authString = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
@@ -717,7 +717,7 @@ namespace TID3.Views
             {
                 SpotifyTestStatus.Text = $"✗ Error: {ex.Message}";
                 SpotifyTestStatus.Foreground = new SolidColorBrush(Color.FromRgb(220, 53, 69)); // Red
-                System.Diagnostics.Debug.WriteLine($"Spotify test error: {ex}");
+                TID3Logger.Warning("HTTP", "Spotify test error", ex, component: "SettingsWindow");
             }
             finally
             {

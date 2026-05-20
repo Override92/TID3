@@ -95,45 +95,46 @@ namespace TID3.Services
                 throw new ArgumentException("AcoustID API key is required", nameof(apiKey));
 
             _apiKey = apiKey;
-            _httpClient = HttpClientManager.Instance;
+            _httpClient = HttpClientManager.AcoustId;
         }
 
         public async Task<List<AcoustIdResult>> IdentifyByFingerprintAsync(string filePath)
         {
+            using var scope = TID3Logger.BeginScope("AcoustId", "IdentifyByFingerprint", new { 
+                FilePath = Path.GetFileName(filePath) 
+            }, "AcoustIdService");
+            
             try
             {
-                System.Diagnostics.Debug.WriteLine("🚀 Starting fingerprint identification process");
+                TID3Logger.Info("AcoustId", "Starting fingerprint identification process", component: "AcoustIdService");
                 
                 // Extract fingerprint using fpcalc (Chromaprint command-line tool)
-                System.Diagnostics.Debug.WriteLine("📋 Step 1: Extracting fingerprint");
+                TID3Logger.Debug("AcoustId", "Extracting fingerprint", component: "AcoustIdService");
                 var fingerprint = await ExtractFingerprintAsync(filePath);
                 if (string.IsNullOrEmpty(fingerprint))
                 {
                     throw new InvalidOperationException("Failed to extract fingerprint from audio file");
                 }
 
-                System.Diagnostics.Debug.WriteLine($"✅ Step 1 completed: Extracted fingerprint length: {fingerprint.Length}");
+                TID3Logger.Debug("AcoustId", "Fingerprint extracted successfully", new { 
+                    FingerprintLength = fingerprint.Length 
+                }, "AcoustIdService");
 
                 // Get duration
-                System.Diagnostics.Debug.WriteLine("⏱️ Step 2: Getting audio duration");
+                TID3Logger.Debug("AcoustId", "Getting audio duration", component: "AcoustIdService");
                 var duration = GetAudioDuration(filePath);
-                System.Diagnostics.Debug.WriteLine($"✅ Step 2 completed: Duration = {duration} seconds");
 
                 // Query AcoustID API
-                System.Diagnostics.Debug.WriteLine("🌐 Step 3: Querying AcoustID API");
                 var results = await QueryAcoustIdAsync(fingerprint, duration);
-                System.Diagnostics.Debug.WriteLine($"✅ Step 3 completed: Found {results.Count} results");
                 
                 return results;
             }
             catch (System.ComponentModel.Win32Exception win32Ex)
             {
-                System.Diagnostics.Debug.WriteLine($"❌ Win32Exception in IdentifyByFingerprintAsync: {win32Ex.Message}, Code: {win32Ex.ErrorCode}");
                 throw new InvalidOperationException($"Win32 error during fingerprint identification: {win32Ex.Message} (Code: {win32Ex.ErrorCode})", win32Ex);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"❌ Exception in IdentifyByFingerprintAsync: {ex.GetType().Name}: {ex.Message}");
                 throw new InvalidOperationException($"Failed to identify audio file: {ex.Message}", ex);
             }
         }
@@ -223,17 +224,13 @@ namespace TID3.Services
                 var error = await testProcess.StandardError.ReadToEndAsync();
                 await testProcess.WaitForExitAsync();
 
-                System.Diagnostics.Debug.WriteLine($"fpcalc version test - Exit code: {testProcess.ExitCode}");
-                System.Diagnostics.Debug.WriteLine($"fpcalc version output: {output}");
                 if (!string.IsNullOrEmpty(error))
-                    System.Diagnostics.Debug.WriteLine($"fpcalc version error: {error}");
 
                 if (testProcess.ExitCode != 0)
                 {
                     throw new InvalidOperationException($"fpcalc.exe version test failed with exit code {testProcess.ExitCode}: {error}");
                 }
                 
-                System.Diagnostics.Debug.WriteLine("✅ fpcalc.exe version test passed");
             }
             catch (System.ComponentModel.Win32Exception win32Ex)
             {
@@ -436,8 +433,7 @@ namespace TID3.Services
             {
                 var url = $"https://musicbrainz.org/ws/2/recording/{recordingId}?fmt=json&inc=releases";
                 
-                var client = HttpClientManager.CreateClientWithUserAgent("TID3/1.0 (contact@example.com)");
-                var response = await client.SafeGetAsync(url, maxRetries: 2, delayMs: 500);
+                var response = await HttpClientManager.AcoustId.SafeGetAsync(url, maxRetries: 2, delayMs: 500);
                 
                 if (response == null || !response.IsSuccessStatusCode)
                     return null;

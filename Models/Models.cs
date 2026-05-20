@@ -3,10 +3,12 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using TID3.Utils;
 
 namespace TID3.Models
 {
@@ -25,16 +27,24 @@ namespace TID3.Models
                 var originalWidth = Image.GetValue(TID3.Services.TagService.OriginalWidthProperty);
                 var originalHeight = Image.GetValue(TID3.Services.TagService.OriginalHeightProperty);
                 
-                System.Diagnostics.Debug.WriteLine($"CoverSource.Resolution: OriginalWidth={originalWidth}, OriginalHeight={originalHeight}, Current={Image.PixelWidth}×{Image.PixelHeight}");
+                TID3Logger.Debug("Images", "CoverSource resolution calculation", new {
+                    OriginalWidth = originalWidth,
+                    OriginalHeight = originalHeight,
+                    CurrentWidth = Image.PixelWidth,
+                    CurrentHeight = Image.PixelHeight
+                }, "CoverSource");
                 
                 if (originalWidth is int width && originalHeight is int height && width > 0 && height > 0)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Using original dimensions: {width} × {height}");
+                    TID3Logger.Debug("Images", "Using original dimensions", new { Width = width, Height = height }, "CoverSource");
                     return $"{width} × {height}";
                 }
                 
                 // Fall back to current image dimensions (for online images)
-                System.Diagnostics.Debug.WriteLine($"Using current dimensions: {Image.PixelWidth} × {Image.PixelHeight}");
+                TID3Logger.Debug("Images", "Using current dimensions", new { 
+                    Width = Image.PixelWidth, 
+                    Height = Image.PixelHeight 
+                }, "CoverSource");
                 return $"{Image.PixelWidth} × {Image.PixelHeight}";
             } 
         }
@@ -187,7 +197,18 @@ namespace TID3.Models
         public BitmapImage? AlbumCover
         {
             get => _albumCover;
-            set { _albumCover = value; OnPropertyChanged(); }
+            set { 
+                TID3.Utils.TID3Logger.Debug("Images", "Setting AlbumCover property", new {
+                    FileName = Path.GetFileName(FilePath),
+                    HasValue = value != null
+                }, "AudioFileInfo");
+                if (value != null)
+                {
+                    TID3.Utils.TID3Logger.Images.LogImageDetails(value, "AlbumCover being set", "AudioFileInfo");
+                }
+                _albumCover = value; 
+                OnPropertyChanged(); 
+            }
         }
 
         public string CoverArtSource
@@ -199,7 +220,19 @@ namespace TID3.Models
         public BitmapImage? LocalCover
         {
             get => _localCover;
-            set { _localCover = value; OnPropertyChanged(); UpdateActiveCover(); }
+            set { 
+                TID3.Utils.TID3Logger.Debug("Images", "Setting LocalCover property", new {
+                    FileName = Path.GetFileName(FilePath),
+                    HasValue = value != null
+                }, "AudioFileInfo");
+                if (value != null)
+                {
+                    TID3.Utils.TID3Logger.Images.LogImageDetails(value, "LocalCover being set", "AudioFileInfo");
+                }
+                _localCover = value; 
+                OnPropertyChanged(); 
+                UpdateActiveCover(); 
+            }
         }
 
         public BitmapImage? OnlineCover
@@ -244,9 +277,17 @@ namespace TID3.Models
 
         private void UpdateActiveCover()
         {
+            using var scope = TID3.Utils.TID3Logger.BeginScope("Images", "UpdateActiveCover", new {
+                FileName = Path.GetFileName(FilePath),
+                UseLocalCover = UseLocalCover,
+                HasLocalCover = LocalCover != null,
+                HasOnlineCover = OnlineCover != null
+            }, "AudioFileInfo");
+            
             UpdateAvailableCovers();
             if (UseLocalCover && LocalCover != null)
             {
+                TID3.Utils.TID3Logger.Debug("Images", "Using LocalCover as AlbumCover", component: "AudioFileInfo");
                 AlbumCover = LocalCover;
                 CoverArtSource = "Local File";
                 UpdateCoverResolution(LocalCover);
