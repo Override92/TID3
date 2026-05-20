@@ -108,6 +108,7 @@ namespace TID3.Views
         private readonly CoverArtService _coverArtService;
         private readonly MatchScoringService _matchScorer = new();
         private readonly BatchEditService _batchEditService = new();
+        private readonly AlbumGrouper _albumGrouper = new();
         private readonly ObservableCollection<AudioFileInfo> _audioFiles;
         private readonly ObservableCollection<OnlineSourceItem> _onlineSourceItems;
         private readonly ObservableCollection<AlbumGroup> _hierarchicalItems;
@@ -915,22 +916,8 @@ namespace TID3.Views
 
         private void RebuildHierarchicalStructure()
         {
-            var albumGroups = _audioFiles
-                .GroupBy(file => file.Album ?? "Unknown Album")
-                .Select(group => new AlbumGroup
-                {
-                    Album = group.Key,
-                    Artist = group.FirstOrDefault()?.AlbumArtist ?? group.FirstOrDefault()?.Artist ?? "Unknown Artist",
-                    Year = group.Max(f => f.Year),
-                    Genre = group.FirstOrDefault()?.Genre ?? "",
-                    Tracks = new ObservableCollection<AudioFileInfo>(group.OrderBy(f => f.Track))
-                })
-                .OrderBy(g => g.Artist)
-                .ThenBy(g => g.Year)
-                .ThenBy(g => g.Album);
-
             _hierarchicalItems.Clear();
-            foreach (var albumGroup in albumGroups)
+            foreach (var albumGroup in _albumGrouper.GroupByAlbum(_audioFiles))
             {
                 _hierarchicalItems.Add(albumGroup);
             }
@@ -1861,9 +1848,12 @@ namespace TID3.Views
 
         private double ExtractScoreFromDisplayName(string displayName)
         {
-            // Extract percentage score from strings like "[85.2%]" or "[92%]"
+            // Extract percentage score from strings like "[85.2%]" or "[92%]".
+            // The captured number always uses '.' as the decimal separator, so it
+            // must be parsed with the invariant culture (not the OS locale).
             var match = System.Text.RegularExpressions.Regex.Match(displayName, @"\[(\d+\.?\d*)%\]");
-            if (match.Success && double.TryParse(match.Groups[1].Value, out double score))
+            if (match.Success && double.TryParse(match.Groups[1].Value,
+                    NumberStyles.Float, CultureInfo.InvariantCulture, out double score))
             {
                 return score;
             }
