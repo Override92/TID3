@@ -366,15 +366,7 @@ namespace TID3.Services
                 var folderPath = Path.GetDirectoryName(filePath);
                 if (!string.IsNullOrEmpty(folderPath))
                 {
-                    string[] coverArtNames = {
-                        "folder.jpg", "folder.jpeg", "folder.png",
-                        "cover.jpg", "cover.jpeg", "cover.png",
-                        "front.jpg", "front.jpeg", "front.png",
-                        "albumart.jpg", "albumart.jpeg", "albumart.png",
-                        "album.jpg", "album.jpeg", "album.png"
-                    };
-
-                    foreach (var fileName in coverArtNames)
+                    foreach (var fileName in CoverArtFileResolver.StandardCoverNames)
                     {
                         var coverPath = SecureCombinePath(folderPath, fileName);
                         if (coverPath != null && System.IO.File.Exists(coverPath))
@@ -384,9 +376,8 @@ namespace TID3.Services
                     }
 
                     // Check for any image files
-                    var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif" };
                     var imageFiles = Directory.GetFiles(folderPath)
-                        .Where(file => imageExtensions.Contains(Path.GetExtension(file).ToLower()))
+                        .Where(CoverArtFileResolver.IsImageFile)
                         .ToArray();
 
                     if (imageFiles.Length > 0)
@@ -416,63 +407,27 @@ namespace TID3.Services
                     return null;
                 }
 
-                // Common cover art filenames in order of preference
-                string[] coverArtNames = {
-                    "folder.jpg", "folder.jpeg", "folder.png",
-                    "cover.jpg", "cover.jpeg", "cover.png",
-                    "front.jpg", "front.jpeg", "front.png",
-                    "albumart.jpg", "albumart.jpeg", "albumart.png",
-                    "album.jpg", "album.jpeg", "album.png",
-                    // Also check for album-specific names
-                };
+                // Resolve cover-file candidates (standard names first, then keyword
+                // images, then any image) and load the first that opens successfully.
+                var folderFiles = Directory.GetFiles(folderPath);
+                var candidates = CoverArtFileResolver.ResolveCoverCandidates(folderFiles);
+                TID3Logger.Debug("Images", "Resolved cover candidates", new { Candidates = candidates }, "TagService");
 
-                // First, try standard names
-                TID3Logger.Debug("Images", "Trying standard cover filenames", new { FileNames = coverArtNames }, "TagService");
-                foreach (var fileName in coverArtNames)
+                foreach (var fileName in candidates)
                 {
                     var coverPath = SecureCombinePath(folderPath, fileName);
-                    if (coverPath != null && System.IO.File.Exists(coverPath))
+                    if (coverPath == null || !System.IO.File.Exists(coverPath))
+                        continue;
+
+                    TID3Logger.Images.LogFileInfo(coverPath, "TagService");
+                    var result = LoadImageFromFile(coverPath);
+                    if (result != null)
                     {
-                        TID3Logger.Debug("Images", "Found standard cover file", new { FileName = fileName, FilePath = coverPath }, "TagService");
-                        TID3Logger.Images.LogFileInfo(coverPath, "TagService");
-                        
-                        var result = LoadImageFromFile(coverPath);
-                        
-                        if (result != null)
-                        {
-                            TID3Logger.Images.LogImageDetails(result, "Folder cover result", "TagService");
-                            return result;
-                        }
-                        else
-                        {
-                            TID3Logger.Warning("Images", "Failed to load standard cover file", new { FilePath = coverPath }, "TagService");
-                        }
+                        TID3Logger.Images.LogImageDetails(result, "Folder cover result", "TagService");
+                        return result;
                     }
-                }
-                TID3Logger.Debug("Images", "No standard cover files found, searching for any image files", component: "TagService");
 
-                // If no standard names found, look for any image files
-                var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif" };
-                var imageFiles = Directory.GetFiles(folderPath)
-                    .Where(file => imageExtensions.Contains(Path.GetExtension(file).ToLower()))
-                    .OrderBy(file => Path.GetFileName(file).ToLower()) // Alphabetical order
-                    .ToArray();
-
-                // Try to find images with album-related keywords
-                var albumKeywords = new[] { "cover", "front", "album", "folder" };
-                foreach (var imageFile in imageFiles)
-                {
-                    var fileName = Path.GetFileNameWithoutExtension(imageFile).ToLower();
-                    if (albumKeywords.Any(keyword => fileName.Contains(keyword)))
-                    {
-                        return LoadImageFromFile(imageFile);
-                    }
-                }
-
-                // If still nothing found, use the first image file (if any)
-                if (imageFiles.Length > 0)
-                {
-                    return LoadImageFromFile(imageFiles[0]);
+                    TID3Logger.Warning("Images", "Failed to load cover file", new { FilePath = coverPath }, "TagService");
                 }
             }
             catch (Exception ex)
@@ -550,15 +505,7 @@ namespace TID3.Services
         {
             try
             {
-                string[] coverArtNames = {
-                    "folder.jpg", "folder.jpeg", "folder.png",
-                    "cover.jpg", "cover.jpeg", "cover.png",
-                    "front.jpg", "front.jpeg", "front.png",
-                    "albumart.jpg", "albumart.jpeg", "albumart.png",
-                    "album.jpg", "album.jpeg", "album.png"
-                };
-
-                foreach (var fileName in coverArtNames)
+                foreach (var fileName in CoverArtFileResolver.StandardCoverNames)
                 {
                     var coverPath = SecureCombinePath(folderPath, fileName);
                     if (coverPath != null && System.IO.File.Exists(coverPath))
@@ -568,9 +515,8 @@ namespace TID3.Services
                 }
 
                 // Check for any image files
-                var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif" };
                 var imageFiles = Directory.GetFiles(folderPath)
-                    .Where(file => imageExtensions.Contains(Path.GetExtension(file).ToLower()))
+                    .Where(CoverArtFileResolver.IsImageFile)
                     .ToArray();
 
                 if (imageFiles.Length > 0)
@@ -689,27 +635,11 @@ namespace TID3.Services
         private string GetCoverArtFileName(AudioFileInfo audioFile)
         {
             var folderPath = Path.GetDirectoryName(audioFile.FilePath);
-            if (!string.IsNullOrEmpty(folderPath))
-            {
-                string[] commonNames = { "folder.jpg", "cover.jpg", "front.jpg", "albumart.jpg", "album.jpg", "folder.jpeg", "cover.jpeg", "front.jpeg", "albumart.jpeg", "album.jpeg", "folder.png", "cover.png", "front.png", "albumart.png", "album.png" };
-                
-                // First, check if there's already a local cover art file that we should replace
-                foreach (var name in commonNames)
-                {
-                    var existingPath = SecureCombinePath(folderPath, name);
-                    if (existingPath != null && System.IO.File.Exists(existingPath))
-                    {
-                        return name; // Use the existing file name to replace it
-                    }
-                }
-                
-                // If no existing cover art file found, use the default preference order
-                string[] preferredNames = { "cover.jpg", "folder.jpg", "front.jpg", "albumart.jpg", "album.jpg" };
-                return preferredNames[0]; // Default to cover.jpg for new files
-            }
+            if (string.IsNullOrEmpty(folderPath))
+                return "cover.jpg";
 
-            // Fallback if folder path is empty
-            return "cover.jpg";
+            // Reuse an existing standard cover file (to replace in place), else "cover.jpg".
+            return CoverArtFileResolver.ResolveSaveFileName(Directory.GetFiles(folderPath));
         }
 
         private string SanitizeFileName(string fileName)
