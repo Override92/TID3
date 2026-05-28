@@ -179,16 +179,16 @@ namespace TID3.Services
                 {
                     FilePath = filePath,
                     Title = tag.Title ?? string.Empty,
-                    Artist = JoinStringArray(tag.Performers),
+                    Artist = TagFormatting.JoinValues(tag.Performers),
                     Album = tag.Album ?? string.Empty,
-                    Genre = JoinStringArray(tag.Genres),
+                    Genre = TagFormatting.JoinValues(tag.Genres),
                     Year = tag.Year,
                     Track = tag.Track,
-                    AlbumArtist = JoinStringArray(tag.AlbumArtists),
+                    AlbumArtist = TagFormatting.JoinValues(tag.AlbumArtists),
                     Comment = tag.Comment ?? string.Empty,
-                    Duration = FormatDuration(properties.Duration),
-                    Bitrate = FormatBitrate(properties.AudioBitrate),
-                    FileSize = FormatFileSize(new FileInfo(filePath).Length),
+                    Duration = TagFormatting.FormatDuration(properties.Duration),
+                    Bitrate = TagFormatting.FormatBitrate(properties.AudioBitrate),
+                    FileSize = TagFormatting.FormatFileSize(new FileInfo(filePath).Length),
                     LocalCover = LoadAlbumCover(tag) ?? LoadCoverArtFromFolder(filePath),
                     CoverArtSource = GetCoverArtSource(tag, filePath)
                 };
@@ -212,55 +212,18 @@ namespace TID3.Services
             }
         }
         
-        // Optimized string joining to avoid unnecessary allocations
-        private static string JoinStringArray(string[]? array)
-        {
-            if (array == null || array.Length == 0)
-                return string.Empty;
-            
-            if (array.Length == 1)
-                return array[0] ?? string.Empty;
-            
-            return string.Join(", ", array);
-        }
-        
-        // Optimized duration formatting without string interpolation overhead
-        private static string FormatDuration(TimeSpan duration)
-        {
-            return duration.ToString(@"mm\:ss");
-        }
-        
-        // Optimized bitrate formatting to reduce allocations
-        private static string FormatBitrate(int bitrate)
-        {
-            return bitrate > 0 ? $"{bitrate} kbps" : "Unknown";
-        }
-
-        private static string FormatFileSize(long bytes)
-        {
-            string[] suffixes = ["B", "KB", "MB", "GB"];
-            int counter = 0;
-            decimal number = bytes;
-            while (Math.Round(number / 1024) >= 1)
-            {
-                number /= 1024;
-                counter++;
-            }
-            return $"{number:n1} {suffixes[counter]}";
-        }
-
         public (bool Success, bool CoverArtSaved) SaveFile(AudioFileInfo audioFile, bool replaceExistingCoverArt = false)
         {
             try
             {
                 using var file = TagLib.File.Create(audioFile.FilePath);
                 file.Tag.Title = audioFile.Title;
-                file.Tag.Performers = [.. audioFile.Artist.Split(',').Select(s => s.Trim())];
+                file.Tag.Performers = TagFormatting.SplitValues(audioFile.Artist);
                 file.Tag.Album = audioFile.Album;
-                file.Tag.Genres = [.. audioFile.Genre.Split(',').Select(s => s.Trim())];
+                file.Tag.Genres = TagFormatting.SplitValues(audioFile.Genre);
                 file.Tag.Year = audioFile.Year;
                 file.Tag.Track = audioFile.Track;
-                file.Tag.AlbumArtists = [.. audioFile.AlbumArtist.Split(',').Select(s => s.Trim())];
+                file.Tag.AlbumArtists = TagFormatting.SplitValues(audioFile.AlbumArtist);
                 file.Tag.Comment = audioFile.Comment;
                 file.Save();
                 
