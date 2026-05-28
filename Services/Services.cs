@@ -21,7 +21,7 @@ namespace TID3.Services
         // Using Compiled option for better performance than runtime compilation
         internal static readonly Regex TrackCountPattern = new(@"(\d+)\s*tracks?", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     }
-    public class MusicBrainzService
+    public class MusicBrainzService : IMusicBrainzService
     {
         private const string BASE_URL = "https://musicbrainz.org/ws/2/";
         private AppSettings _settings;
@@ -122,7 +122,7 @@ namespace TID3.Services
         }
     }
 
-    public class DiscogsService
+    public class DiscogsService : IDiscogsService
     {
         private const string BASE_URL = "https://api.discogs.com/";
         private AppSettings _settings;
