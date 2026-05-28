@@ -359,72 +359,28 @@ namespace TID3.Services
 
         private async Task<List<AcoustIdResult>> ProcessAcoustIdResponse(AcoustIdApiResponse apiResponse, int duration)
         {
-            List<AcoustIdResult> results = [];
-            
-            if (apiResponse.Results == null) return results;
-            
-            foreach (var result in apiResponse.Results.Take(5))
+            // Pure mapping (structure, defaults, duration parsing, score ordering).
+            var results = AcoustIdResponseMapper.MapResults(apiResponse, duration);
+
+            // Enrich results that still lack album info by looking up the recording
+            // on MusicBrainz. Placeholder (no-recording) results never have album
+            // "Unknown Album", so they are skipped naturally.
+            foreach (var result in results)
             {
-                if (result.Recordings != null && result.Recordings.Length > 0)
+                if (result.Album == AcoustIdResponseMapper.UnknownAlbum && !string.IsNullOrEmpty(result.MusicBrainzId))
                 {
-                    foreach (var recording in result.Recordings.Take(3))
+                    try
                     {
-                        var artistName = recording.Artists?.FirstOrDefault()?.Name ?? "Unknown Artist";
-                        var albumName = recording.Releases?.FirstOrDefault()?.Title ?? "Unknown Album";
-                        
-                        // If we don't have album info, try to get it from the recording ID
-                        if (albumName == "Unknown Album" && !string.IsNullOrEmpty(recording.Id))
-                        {
-                            try
-                            {
-                                albumName = await GetAlbumFromMusicBrainz(recording.Id) ?? "Unknown Album";
-                            }
-                            catch
-                            {
-                                // Fallback failed, keep "Unknown Album"
-                            }
-                        }
-
-                        // Parse duration from object (could be decimal, int, string, or null)
-                        int recordingDuration = duration; // fallback
-                        if (recording.Duration != null)
-                        {
-                            if (recording.Duration is double doubleDuration)
-                                recordingDuration = (int)Math.Round(doubleDuration);
-                            else if (recording.Duration is int intDuration)
-                                recordingDuration = intDuration;
-                            else if (double.TryParse(recording.Duration.ToString(), out double parsedDuration))
-                                recordingDuration = (int)Math.Round(parsedDuration);
-                        }
-
-                        results.Add(new AcoustIdResult
-                        {
-                            TrackId = result.Id,
-                            MusicBrainzId = recording.Id,
-                            Title = recording.Title ?? "Unknown Title",
-                            Artist = artistName,
-                            Album = albumName,
-                            Duration = recordingDuration,
-                            Score = result.Score
-                        });
+                        result.Album = await GetAlbumFromMusicBrainz(result.MusicBrainzId) ?? AcoustIdResponseMapper.UnknownAlbum;
                     }
-                }
-                else
-                {
-                    results.Add(new AcoustIdResult
+                    catch
                     {
-                        TrackId = result.Id,
-                        MusicBrainzId = result.Id,
-                        Title = "🎵 High Confidence Match (97.97%)",
-                        Artist = "Use 'Search MusicBrainz' button for metadata",
-                        Album = $"AcoustID: {(result.Id?.Length >= 8 ? result.Id[..8] : result.Id ?? "Unknown")}...", 
-                        Duration = duration,
-                        Score = result.Score
-                    });
+                        // Fallback failed, keep "Unknown Album"
+                    }
                 }
             }
 
-            return [.. results.OrderByDescending(r => r.Score)];
+            return results;
         }
 
         private async Task<string?> GetAlbumFromMusicBrainz(string recordingId)
