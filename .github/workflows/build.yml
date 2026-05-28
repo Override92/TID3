@@ -30,6 +30,9 @@ jobs:
       env:
         BUILD_COUNTER: ${{ github.run_number }}
 
+    - name: Run tests
+      run: dotnet test TID3.Tests/TID3.Tests.csproj --configuration Release
+
     - name: Publish Self-Contained Executable
       run: dotnet publish TID3.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish
       env:
