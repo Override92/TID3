@@ -36,26 +36,8 @@ namespace TID3.Services
             var url = $"{BASE_URL}release/?query={Uri.EscapeDataString(query)}&fmt=json&limit=10";
             var response = await HttpClientManager.MusicBrainz.GetStringAsync(url);
             using var document = JsonDocument.Parse(response);
-            var data = document.RootElement;
 
-            var releases = new List<MusicBrainzRelease>();
-            if (data.TryGetProperty("releases", out var releasesElement))
-            {
-                foreach (var release in releasesElement.EnumerateArray())
-                {
-                    var mbRelease = new MusicBrainzRelease
-                    {
-                        Id = release.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "",
-                        Title = release.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
-                        Artist = GetArtistFromCredit(release),
-                        Date = release.TryGetProperty("date", out var date) ? date.GetString() ?? "" : "",
-                        Score = release.TryGetProperty("score", out var score) ? score.GetInt32() : 0,
-                        TrackCount = GetMusicBrainzTrackCount(release)
-                    };
-                    releases.Add(mbRelease);
-                }
-            }
-            return releases;
+            return MusicBrainzResponseParser.ParseSearchResults(document.RootElement);
         }
 
         public async Task<MusicBrainzRelease?> GetReleaseDetails(string releaseId)
@@ -63,40 +45,8 @@ namespace TID3.Services
             var url = $"{BASE_URL}release/{releaseId}?inc=recordings&fmt=json";
             var response = await HttpClientManager.MusicBrainz.GetStringAsync(url);
             using var document = JsonDocument.Parse(response);
-            var data = document.RootElement;
 
-            var release = new MusicBrainzRelease
-            {
-                Id = data.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "",
-                Title = data.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
-                Artist = GetArtistFromCredit(data),
-                Date = data.TryGetProperty("date", out var date) ? date.GetString() ?? "" : ""
-            };
-
-            if (data.TryGetProperty("media", out var mediaElement))
-            {
-                foreach (var medium in mediaElement.EnumerateArray())
-                {
-                    if (medium.TryGetProperty("tracks", out var tracksElement))
-                    {
-                        foreach (var track in tracksElement.EnumerateArray())
-                        {
-                            release.Tracks.Add(new MusicBrainzTrack
-                            {
-                                Title = track.TryGetProperty("title", out var trackTitle) ? trackTitle.GetString() ?? "" : "",
-                                Artist = GetTrackArtist(track, release.Artist),
-                                Position = track.TryGetProperty("position", out var pos) ? pos.GetInt32() : 0,
-                                Length = track.TryGetProperty("length", out var len) ? len.GetInt32() : 0
-                            });
-                        }
-                    }
-                }
-            }
-
-            // Update track count based on loaded tracks
-            release.TrackCount = release.Tracks.Count;
-
-            return release;
+            return MusicBrainzResponseParser.ParseReleaseDetails(document.RootElement);
         }
 
         public async Task<string?> GetCoverArtUrl(string releaseId)
@@ -169,57 +119,6 @@ namespace TID3.Services
         {
             _settings = SettingsManager.LoadSettings();
             // Headers are now managed by HttpClientManager.MusicBrainz
-        }
-
-        private static string GetArtistFromCredit(JsonElement element)
-        {
-            if (element.TryGetProperty("artist-credit", out var creditElement) && creditElement.ValueKind == JsonValueKind.Array)
-            {
-                var firstCredit = creditElement.EnumerateArray().FirstOrDefault();
-                if (firstCredit.TryGetProperty("name", out var nameElement))
-                {
-                    return nameElement.GetString() ?? "Unknown Artist";
-                }
-            }
-            return "Unknown Artist";
-        }
-
-        private static string GetTrackArtist(JsonElement track, string fallbackArtist)
-        {
-            if (track.TryGetProperty("recording", out var recording))
-            {
-                return GetArtistFromCredit(recording);
-            }
-            return fallbackArtist;
-        }
-
-        private static int GetMusicBrainzTrackCount(JsonElement element)
-        {
-            // Check if track-count is available in the search response
-            if (element.TryGetProperty("track-count", out var trackCountElement) && trackCountElement.ValueKind == JsonValueKind.Number)
-            {
-                return trackCountElement.GetInt32();
-            }
-
-            // Alternative: check if media array is available with track info
-            if (element.TryGetProperty("media", out var mediaElement) && mediaElement.ValueKind == JsonValueKind.Array)
-            {
-                int totalTracks = 0;
-                foreach (var medium in mediaElement.EnumerateArray())
-                {
-                    if (medium.TryGetProperty("track-count", out var mediumTrackCount) && mediumTrackCount.ValueKind == JsonValueKind.Number)
-                    {
-                        totalTracks += mediumTrackCount.GetInt32();
-                    }
-                    else if (medium.TryGetProperty("tracks", out var tracksElement) && tracksElement.ValueKind == JsonValueKind.Array)
-                    {
-                        totalTracks += tracksElement.GetArrayLength();
-                    }
-                }
-                return totalTracks;
-            }
-
-            return 0; // Track count not available
         }
     }
 
